@@ -12,4 +12,4 @@
 ## Important documents:
 
 - [Project Proposal](https://docs.google.com/document/d/1cGvCQ9Vi4sMQLHlTNQHU1j5jcXeqkZ2ZvuOZDr7Ufe8/edit?tab=t.0)
-- [Canvas](https://canvas.asu.edu/groups/748905#)
+- [Canvas]()
