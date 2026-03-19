@@ -25,7 +25,20 @@ def parse_args() -> argparse.Namespace:
         description="Banking Fraud Detection — Baseline vs Graph-Enhanced Models"
     )
     
-    # TODO: Add parsers 
+    parser.add_argument(
+        "--data",
+        type=str,
+        default=None,
+        help="Path to BankSim CSV file (default: auto-download)",
+    )
+    
+    parser.add_argument(
+        "--balance",
+        type=str,
+        choices=["oversample", "undersample"],
+        default="oversample",
+        help="Class balancing strategy (default: oversample)",
+    )
     
     return parser.parse_args()
 
