@@ -16,8 +16,9 @@
 ### Prerequisites
 
 - Python 3.10+
+- (Optional) Neo4j 5.x with GDS plugin for full graph features — the pipeline falls back to pandas-based proxies if Neo4j is unavailable
 
-### 1. Install dependencies + venv
+### 1. Set up environment
 
 ```bash
 python3 -m venv venv
@@ -25,29 +26,33 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Run the preprocessing pipeline
-
-The `main.py` entry point orchestrates the full pipeline. It downloads the [BankSim dataset](https://www.kaggle.com/datasets/ealaxi/banksim1) automatically if it is not already present in `data/`.
+### 2. Run the full pipeline
 
 ```bash
 python main.py
 ```
 
-This will:
+This runs preprocessing (with SMOTE-ENN balancing) and EDA. The BankSim dataset is auto-downloaded on first run.
 
-1. Download the BankSim dataset (via `kagglehub`) and cache it locally in `data/`
-2. Load and clean the CSV (handle missing values, drop constant columns)
-3. Encode categorical features and scale numeric features
-4. Display class-imbalance statistics
-5. Compare oversampling and undersampling distributions
-6. Produce a stratified train/test split on the balanced data
+**Options:**
 
-> **Note:** `main.py` argument parsing is still under development. If you encounter issues, you can run the preprocessing pipeline directly in a Python shell:
->
-> ```python
-> from preprocessing import run_preprocessing
-> result = run_preprocessing()  # downloads data, defaults to oversampling
-> ```
+```bash
+python main.py --balance oversample    # use random oversampling instead of SMOTE-ENN
+python main.py --balance undersample   # use random undersampling
+python main.py --skip-eda              # skip EDA plot generation
+python main.py --data path/to/file.csv # use a custom CSV path
+```
+
+### 3. Run individual modules
+
+Each module can also be run standalone:
+
+```bash
+python eda.py              # EDA only (plots saved to output/eda/)
+python models.py           # Baseline models with hyperparameter tuning (LR, SVM, RF, XGBoost)
+python graph.py            # Neo4j graph construction + feature extraction
+python hybrid_models.py   # Graph-enhanced models vs baseline comparison
+```
 
 ### Manual dataset setup (optional)
 
@@ -57,7 +62,34 @@ If you prefer not to use the Kaggle API, download the CSV manually from [BankSim
 data/bs140513_032310.csv
 ```
 
-## Important documents:
+### Neo4j setup (optional)
+
+For full graph features (PageRank, Betweenness Centrality, Louvain community detection), install Neo4j and set environment variables:
+
+```bash
+export NEO4J_URI=bolt://localhost:7687
+export NEO4J_USER=neo4j
+export NEO4J_PASSWORD=yourpassword
+```
+
+Without Neo4j, the pipeline uses pandas-based approximations automatically.
+
+## Project Structure
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full module dependency graph, data flow, and design decisions.
+
+```
+main.py              → pipeline orchestrator
+preprocessing.py     → data loading, cleaning, encoding, balancing, splitting
+eda.py               → exploratory data analysis (7 plot types)
+models.py            → baseline ML models + GridSearchCV tuning
+graph.py             → Neo4j graph pipeline + feature extraction
+hybrid_models.py     → graph-enhanced model comparison
+eval_utils.py        → shared evaluation function
+```
+
+## Important Documents
 
 - [Project Proposal](https://docs.google.com/document/d/1cGvCQ9Vi4sMQLHlTNQHU1j5jcXeqkZ2ZvuOZDr7Ufe8/edit?tab=t.0)
+- [Architecture](ARCHITECTURE.md)
 - [Canvas]()
