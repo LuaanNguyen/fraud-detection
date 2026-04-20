@@ -56,15 +56,17 @@ def encode_and_scale(df):
 
 
 # ---------------------------------------------------------------
-# 2. Add graph features (degree centrality + PageRank)
+# 2. Add graph features (degree, PageRank, betweenness, community)
 #    Merchant fraud rate is added *after* the train/test split
 #    to avoid data leakage.
 # ---------------------------------------------------------------
 def add_graph_features(df):
-    """Attach degree centrality and PageRank columns."""
+    """Attach degree centrality, PageRank, betweenness, and community columns."""
     fg = FraudGraph()
     df = fg.extract_degree_centrality(df)
     df = fg.extract_pagerank(df)
+    df = fg.extract_betweenness_centrality(df)
+    df = fg.extract_community_ids(df)
     fg.close()
     return df
 

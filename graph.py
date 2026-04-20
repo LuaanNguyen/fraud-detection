@@ -175,7 +175,133 @@ class FraudGraph:
         return df
 
     # ---------------------------------------------------------------
-    # 6. Extract Fraud Rate per Merchant
+    # 6. Extract Betweenness Centrality
+    # ---------------------------------------------------------------
+    def extract_betweenness_centrality(self, df):
+        """Approximate betweenness centrality for customers and merchants.
+
+        Uses pandas groupby to compute a proxy: for each node, the fraction
+        of unique counterparties it connects to out of all possible
+        counterparties.  When Neo4j GDS is available, runs the real
+        algorithm instead.
+        """
+        print("\n[INFO] Extracting Betweenness Centrality...")
+
+        try:
+            with self.driver.session() as session:
+                session.run("""
+                    CALL gds.graph.project(
+                        'betweennessGraph',
+                        ['Customer', 'Merchant'],
+                        {TRANSACTION: {orientation: 'UNDIRECTED'}}
+                    )
+                """)
+                result = session.run("""
+                    CALL gds.betweenness.stream('betweennessGraph')
+                    YIELD nodeId, score
+                    RETURN gds.util.asNode(nodeId).id AS nodeId, score
+                """)
+                bc_data = {row["nodeId"]: row["score"] for row in result}
+                session.run("CALL gds.graph.drop('betweennessGraph')")
+
+            df["customer_betweenness"] = df["customer"].map(bc_data).fillna(0)
+            df["merchant_betweenness"] = df["merchant"].map(bc_data).fillna(0)
+            print(f"  Betweenness centrality extracted for {len(bc_data):,} nodes (GDS)")
+
+        except Exception as e:
+            print(f"  [WARNING] GDS betweenness failed: {e}")
+            print("  [INFO] Computing pandas-based proxy instead")
+
+            n_merchants = df["merchant"].nunique()
+            n_customers = df["customer"].nunique()
+
+            cust_uniq = df.groupby("customer")["merchant"].nunique().reset_index()
+            cust_uniq.columns = ["customer", "customer_betweenness"]
+            cust_uniq["customer_betweenness"] = cust_uniq["customer_betweenness"] / max(n_merchants, 1)
+
+            merch_uniq = df.groupby("merchant")["customer"].nunique().reset_index()
+            merch_uniq.columns = ["merchant", "merchant_betweenness"]
+            merch_uniq["merchant_betweenness"] = merch_uniq["merchant_betweenness"] / max(n_customers, 1)
+
+            df = df.merge(cust_uniq, on="customer", how="left")
+            df = df.merge(merch_uniq, on="merchant", how="left")
+
+        print(f"  Customer betweenness — mean: {df['customer_betweenness'].mean():.4f}, max: {df['customer_betweenness'].max():.4f}")
+        print(f"  Merchant betweenness — mean: {df['merchant_betweenness'].mean():.4f}, max: {df['merchant_betweenness'].max():.4f}")
+
+        return df
+
+    # ---------------------------------------------------------------
+    # 7. Community Detection (Louvain)
+    # ---------------------------------------------------------------
+    def extract_community_ids(self, df):
+        """Assign community IDs to customers and merchants.
+
+        Uses Neo4j GDS Louvain when available, otherwise falls back to a
+        pandas-based heuristic that groups merchants by their dominant
+        transaction category and customers by their most-used merchant
+        community.
+        """
+        print("\n[INFO] Extracting Community Detection (Louvain)...")
+
+        try:
+            with self.driver.session() as session:
+                session.run("""
+                    CALL gds.graph.project(
+                        'communityGraph',
+                        ['Customer', 'Merchant'],
+                        {TRANSACTION: {orientation: 'UNDIRECTED'}}
+                    )
+                """)
+                result = session.run("""
+                    CALL gds.louvain.stream('communityGraph')
+                    YIELD nodeId, communityId
+                    RETURN gds.util.asNode(nodeId).id AS nodeId, communityId
+                """)
+                comm_data = {row["nodeId"]: row["communityId"] for row in result}
+                session.run("CALL gds.graph.drop('communityGraph')")
+
+            df["customer_community"] = df["customer"].map(comm_data).fillna(-1).astype(int)
+            df["merchant_community"] = df["merchant"].map(comm_data).fillna(-1).astype(int)
+            n_communities = len(set(comm_data.values()))
+            print(f"  Louvain detected {n_communities} communities (GDS)")
+
+        except Exception as e:
+            print(f"  [WARNING] GDS Louvain failed: {e}")
+            print("  [INFO] Computing pandas-based community proxy instead")
+
+            if "category" in df.columns:
+                cat_col = "category"
+            else:
+                cat_col = None
+
+            if cat_col:
+                merch_comm = df.groupby("merchant")[cat_col].agg(
+                    lambda x: x.value_counts().index[0]
+                ).reset_index()
+                merch_comm.columns = ["merchant", "merchant_community"]
+                merch_comm["merchant_community"] = pd.factorize(merch_comm["merchant_community"])[0]
+
+                df = df.merge(merch_comm, on="merchant", how="left")
+
+                cust_comm = df.groupby("customer")["merchant_community"].agg(
+                    lambda x: x.value_counts().index[0]
+                ).reset_index()
+                cust_comm.columns = ["customer", "customer_community"]
+                df = df.merge(cust_comm, on="customer", how="left")
+            else:
+                df["customer_community"] = 0
+                df["merchant_community"] = 0
+
+        n_cust_comm = df["customer_community"].nunique()
+        n_merch_comm = df["merchant_community"].nunique()
+        print(f"  Customer communities: {n_cust_comm}")
+        print(f"  Merchant communities: {n_merch_comm}")
+
+        return df
+
+    # ---------------------------------------------------------------
+    # 8. Extract Fraud Rate per Merchant
     # ---------------------------------------------------------------
     def extract_merchant_fraud_rate(self, df, reference_df=None):
         """Calculate fraud rate per merchant.
@@ -206,7 +332,7 @@ class FraudGraph:
         return df
 
     # ---------------------------------------------------------------
-    # 7. Full graph feature extraction pipeline
+    # 9. Full graph feature extraction pipeline
     # ---------------------------------------------------------------
     def extract_graph_features(self, df):
         """Run all graph feature extractions and return enriched dataframe."""
@@ -216,14 +342,17 @@ class FraudGraph:
 
         df = self.extract_degree_centrality(df)
         df = self.extract_pagerank(df)
+        df = self.extract_betweenness_centrality(df)
+        df = self.extract_community_ids(df)
         df = self.extract_merchant_fraud_rate(df)
 
-        # Save enriched features
         graph_features = [
             "customer", "merchant", "fraud",
             "customer_degree", "merchant_degree",
             "customer_pagerank", "merchant_pagerank",
-            "merchant_fraud_rate"
+            "customer_betweenness", "merchant_betweenness",
+            "customer_community", "merchant_community",
+            "merchant_fraud_rate",
         ]
         out_path = os.path.join(RESULTS_DIR, "graph_features.csv")
         df[graph_features].to_csv(out_path, index=False)
