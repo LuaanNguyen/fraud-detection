@@ -13,11 +13,11 @@ from neo4j import GraphDatabase
 from preprocessing import load_data
 
 # ---------------------------------------------------------------
-# Neo4j Connection
+# Neo4j Connection (override via environment variables)
 # ---------------------------------------------------------------
-NEO4J_URI      = "bolt://localhost:7687"
-NEO4J_USER     = "neo4j"
-NEO4J_PASSWORD = "password123"  
+NEO4J_URI      = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
+NEO4J_USER     = os.environ.get("NEO4J_USER", "neo4j")
+NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -177,17 +177,28 @@ class FraudGraph:
     # ---------------------------------------------------------------
     # 6. Extract Fraud Rate per Merchant
     # ---------------------------------------------------------------
-    def extract_merchant_fraud_rate(self, df):
-        """Calculate fraud rate per merchant — highly informative feature."""
+    def extract_merchant_fraud_rate(self, df, reference_df=None):
+        """Calculate fraud rate per merchant.
+
+        Parameters
+        ----------
+        df           : DataFrame to enrich with the new column.
+        reference_df : If provided, fraud rates are computed from this
+                       DataFrame only (use the training set to avoid
+                       data leakage). Unseen merchants get rate 0.
+        """
         print("\n[INFO] Extracting Merchant Fraud Rate...")
 
-        merchant_fraud = df.groupby("merchant")["fraud"].agg(["sum", "count"]).reset_index()
+        source = reference_df if reference_df is not None else df
+
+        merchant_fraud = source.groupby("merchant")["fraud"].agg(["sum", "count"]).reset_index()
         merchant_fraud.columns = ["merchant", "merchant_fraud_count", "merchant_txn_count"]
         merchant_fraud["merchant_fraud_rate"] = (
             merchant_fraud["merchant_fraud_count"] / merchant_fraud["merchant_txn_count"]
         )
 
         df = df.merge(merchant_fraud[["merchant", "merchant_fraud_rate"]], on="merchant", how="left")
+        df["merchant_fraud_rate"] = df["merchant_fraud_rate"].fillna(0)
 
         print(f"  Merchants with >50% fraud rate: {(merchant_fraud['merchant_fraud_rate'] > 0.5).sum()}")
         print(f"  Merchants with 0% fraud rate  : {(merchant_fraud['merchant_fraud_rate'] == 0).sum()}")

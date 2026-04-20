@@ -29,6 +29,8 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-venv/
-__pycache__/
+
+# Generated results (large CSVs regenerated on demand)
+results/graph_features.csv
+
 data/

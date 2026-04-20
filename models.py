@@ -2,7 +2,7 @@
 models.py
 ----------
 Baseline supervised ML models for fraud detection.
-Logistic Regression, SVM, Random Forest, XGBoost.
+Logistic Regression, Random Forest, XGBoost.
 Evaluated using Precision, Recall, F1-Score, and PR-AUC.
 """
 
@@ -19,13 +19,12 @@ from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
 
 from sklearn.metrics import (
-    precision_score, recall_score, f1_score,
-    average_precision_score, classification_report,
     precision_recall_curve, ConfusionMatrixDisplay,
     confusion_matrix
 )
 
 from preprocessing import run_preprocessing
+from eval_utils import evaluate_model
 
 warnings.filterwarnings("ignore")
 
@@ -37,52 +36,7 @@ os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
 # ---------------------------------------------------------------
-# 1. Train & Evaluate a single model
-# ---------------------------------------------------------------
-def evaluate_model(name, model, X_train, X_test, y_train, y_test):
-    """Train model and return evaluation metrics."""
-    print(f"\n{'='*60}")
-    print(f"  {name}")
-    print(f"{'='*60}")
-
-    # Train
-    model.fit(X_train, y_train)
-
-    # Predict
-    y_pred = model.predict(X_test)
-
-    # Probability scores for PR-AUC
-    if hasattr(model, "predict_proba"):
-        y_scores = model.predict_proba(X_test)[:, 1]
-    elif hasattr(model, "decision_function"):
-        y_scores = model.decision_function(X_test)
-    else:
-        y_scores = y_pred
-
-    # Metrics
-    precision = precision_score(y_test, y_pred, zero_division=0)
-    recall    = recall_score(y_test, y_pred, zero_division=0)
-    f1        = f1_score(y_test, y_pred, zero_division=0)
-    pr_auc    = average_precision_score(y_test, y_scores)
-
-    print(f"  Precision : {precision:.4f}")
-    print(f"  Recall    : {recall:.4f}")
-    print(f"  F1-Score  : {f1:.4f}")
-    print(f"  PR-AUC    : {pr_auc:.4f}")
-    print(f"\n{classification_report(y_test, y_pred, target_names=['Legit','Fraud'])}")
-
-    return {
-        "Model"    : name,
-        "Precision": round(precision, 4),
-        "Recall"   : round(recall, 4),
-        "F1-Score" : round(f1, 4),
-        "PR-AUC"   : round(pr_auc, 4),
-        "y_scores" : y_scores,
-    }
-
-
-# ---------------------------------------------------------------
-# 2. Plot PR curves for all models
+# 1. Plot PR curves for all models
 # ---------------------------------------------------------------
 def plot_pr_curves(results, y_test):
     """Plot Precision-Recall curves for all models."""
@@ -147,8 +101,10 @@ def plot_comparison(summary_df):
 # ---------------------------------------------------------------
 def plot_confusion_matrices(results, y_test):
     """Plot confusion matrix for each model."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
+    n = len(results)
+    fig, axes = plt.subplots(1, n, figsize=(5 * n, 5))
+    if n == 1:
+        axes = [axes]
 
     for i, res in enumerate(results):
         y_pred = (res["y_scores"] >= 0.5).astype(int)
