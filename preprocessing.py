@@ -10,6 +10,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+from imblearn.combine import SMOTEENN
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
 from sklearn.model_selection import train_test_split
@@ -197,45 +198,50 @@ def build_feature_matrix(
 # 6. Handle class imbalance
 # ---------------------------------------------------------------------------
 def balance_data(
-    X: pd.DataFrame, y: pd.Series, strategy: str = "oversample"
+    X: pd.DataFrame, y: pd.Series, strategy: str = "smote_enn"
 ) -> tuple[pd.DataFrame, pd.Series]:
-    """Apply random over- or under-sampling.
+    """Apply a resampling strategy to address class imbalance.
 
     Parameters
     ----------
-    strategy : 'oversample' | 'undersample'
+    strategy : 'smote_enn' | 'oversample' | 'undersample'
+        smote_enn  — SMOTE followed by Edited Nearest Neighbours cleanup
+                     (proposal's primary strategy).
+        oversample — simple random oversampling of the minority class.
+        undersample — simple random undersampling of the majority class.
     """
-    if strategy == "oversample":
+    if strategy == "smote_enn":
+        sampler = SMOTEENN(random_state=RANDOM_STATE)
+    elif strategy == "oversample":
         sampler = RandomOverSampler(random_state=RANDOM_STATE)
     elif strategy == "undersample":
         sampler = RandomUnderSampler(random_state=RANDOM_STATE)
     else:
         raise ValueError(f"Unknown strategy: {strategy}")
 
+    print(f"\n  Balancing with: {strategy}")
     X_res, y_res = sampler.fit_resample(X, y)
     return X_res, y_res
 
 
 def compare_balance_distributions(
     y_orig: pd.Series,
-    y_over: pd.Series,
-    y_under: pd.Series,
+    balanced: dict[str, pd.Series],
 ) -> None:
-    """Print before/after class distributions."""
+    """Print before/after class distributions for all strategies."""
     print(f"\n{'='*60}")
     print("CLASS DISTRIBUTION COMPARISON")
     print(f"{'='*60}")
-    for tag, y in [
-        ("Original", y_orig),
-        ("Oversampled", y_over),
-        ("Undersampled", y_under),
-    ]:
+
+    entries = [("Original", y_orig)] + list(balanced.items())
+    for tag, y in entries:
         counts = y.value_counts().sort_index()
         total = len(y)
         print(
             f"  {tag:<15s} | "
             f"Legit: {counts.get(0, 0):>8,} ({counts.get(0, 0)/total*100:.1f}%) | "
-            f"Fraud: {counts.get(1, 0):>8,} ({counts.get(1, 0)/total*100:.1f}%)"
+            f"Fraud: {counts.get(1, 0):>8,} ({counts.get(1, 0)/total*100:.1f}%) | "
+            f"Total: {total:>10,}"
         )
 
 
@@ -258,9 +264,14 @@ def stratified_split(
 # ---------------------------------------------------------------------------
 def run_preprocessing(
     filepath: str | None = None,
-    balance_strategy: str = "oversample",
+    balance_strategy: str = "smote_enn",
 ) -> dict:
-    """Run the full preprocessing pipeline and return a dict of artefacts."""
+    """Run the full preprocessing pipeline and return a dict of artefacts.
+
+    Parameters
+    ----------
+    balance_strategy : 'smote_enn' | 'oversample' | 'undersample'
+    """
     # Load
     df_raw = load_data(filepath)
     show_class_imbalance(df_raw)
@@ -271,16 +282,18 @@ def run_preprocessing(
     # Feature matrix
     X, y = build_feature_matrix(df_enc)
 
-    # Balance comparisons
-    X_over, y_over = balance_data(X, y, strategy="oversample")
-    X_under, y_under = balance_data(X, y, strategy="undersample")
-    compare_balance_distributions(y, y_over, y_under)
+    # Balance comparisons — show all three for reference
+    balanced = {}
+    for strat in ["smote_enn", "oversample", "undersample"]:
+        X_s, y_s = balance_data(X, y, strategy=strat)
+        balanced[strat] = (X_s, y_s)
 
-    # Choose the requested strategy for modelling
-    if balance_strategy == "oversample":
-        X_bal, y_bal = X_over, y_over
-    else:
-        X_bal, y_bal = X_under, y_under
+    compare_balance_distributions(
+        y, {k: v[1] for k, v in balanced.items()}
+    )
+
+    # Use the requested strategy for modelling
+    X_bal, y_bal = balanced[balance_strategy]
 
     # Stratified split on balanced data
     X_train, X_test, y_train, y_test = stratified_split(X_bal, y_bal)
