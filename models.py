@@ -2,8 +2,9 @@
 models.py
 ----------
 Baseline supervised ML models for fraud detection.
-Logistic Regression, Random Forest, XGBoost.
+Logistic Regression, SVM, Random Forest, XGBoost.
 Evaluated using Precision, Recall, F1-Score, and PR-AUC.
+Includes hyperparameter tuning via GridSearchCV.
 """
 
 import os
@@ -15,12 +16,14 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
+from sklearn.model_selection import GridSearchCV
 
 from sklearn.metrics import (
     precision_recall_curve, ConfusionMatrixDisplay,
-    confusion_matrix
+    confusion_matrix, make_scorer, average_precision_score
 )
 
 from preprocessing import run_preprocessing
@@ -126,24 +129,75 @@ def plot_confusion_matrices(results, y_test):
 
 
 # ---------------------------------------------------------------
-# 5. Run all baseline models
+# 5. Hyperparameter tuning
 # ---------------------------------------------------------------
-def run_baseline_models():
-    """Full pipeline: preprocess → train → evaluate → plot."""
+PARAM_GRIDS = {
+    "Logistic Regression": {
+        "C": [0.01, 0.1, 1, 10],
+        "penalty": ["l2"],
+    },
+    "SVM": {
+        "C": [0.1, 1, 10],
+        "kernel": ["rbf", "linear"],
+        "gamma": ["scale", "auto"],
+    },
+    "Random Forest": {
+        "n_estimators": [100, 200],
+        "max_depth": [None, 10, 20],
+        "min_samples_split": [2, 5],
+    },
+    "XGBoost": {
+        "n_estimators": [100, 200],
+        "max_depth": [3, 6, 10],
+        "learning_rate": [0.01, 0.1, 0.3],
+    },
+}
 
-    # Load preprocessed data
+
+def tune_model(name, model, X_train, y_train):
+    """Run GridSearchCV and return the best estimator."""
+    param_grid = PARAM_GRIDS.get(name, {})
+    if not param_grid:
+        return model
+
+    print(f"\n  [Tuning] {name} — grid search over {param_grid}")
+    scorer = make_scorer(average_precision_score, needs_proba=True)
+
+    # SVM with probability=False can't use needs_proba scorer;
+    # fall back to f1 scoring for SVM
+    if name == "SVM":
+        scorer = "f1"
+
+    grid = GridSearchCV(
+        model, param_grid, scoring=scorer,
+        cv=3, n_jobs=-1, verbose=0,
+    )
+    grid.fit(X_train, y_train)
+    print(f"  [Tuning] {name} — best params: {grid.best_params_}  score: {grid.best_score_:.4f}")
+    return grid.best_estimator_
+
+
+# ---------------------------------------------------------------
+# 6. Run all baseline models
+# ---------------------------------------------------------------
+def run_baseline_models(tune: bool = True):
+    """Full pipeline: preprocess → (optionally tune) → train → evaluate → plot."""
+
     print("\nLoading preprocessed data...")
-    prep = run_preprocessing(balance_strategy="oversample")
+    prep = run_preprocessing(balance_strategy="smote_enn")
 
     X_train = prep["X_train"]
     X_test  = prep["X_test"]
     y_train = prep["y_train"]
     y_test  = prep["y_test"]
 
-    # Define models
+    # Define models (all four per proposal)
     models = [
         ("Logistic Regression", LogisticRegression(
             max_iter=1000, class_weight="balanced", random_state=42
+        )),
+        ("SVM", SVC(
+            class_weight="balanced", probability=True, random_state=42
         )),
         ("Random Forest", RandomForestClassifier(
             n_estimators=100, class_weight="balanced",
@@ -155,6 +209,13 @@ def run_baseline_models():
             verbosity=0
         )),
     ]
+
+    if tune:
+        print(f"\n{'='*60}")
+        print("  HYPERPARAMETER TUNING")
+        print(f"{'='*60}")
+        models = [(name, tune_model(name, m, X_train, y_train))
+                  for name, m in models]
 
     # Train and evaluate each model
     results = []
@@ -173,7 +234,6 @@ def run_baseline_models():
     print(f"{'='*60}")
     print(summary_df.to_string(index=False))
 
-    # Save summary to CSV
     csv_path = os.path.join(RESULTS_DIR, "baseline_results.csv")
     summary_df.to_csv(csv_path, index=False)
     print(f"\n  [Saved] Results CSV → {csv_path}")
