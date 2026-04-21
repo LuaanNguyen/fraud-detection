@@ -12,6 +12,7 @@ import numpy as np
 import pandas as pd
 from imblearn.over_sampling import RandomOverSampler
 from imblearn.under_sampling import RandomUnderSampler
+from imblearn.combine import SMOTEENN
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
@@ -47,14 +48,11 @@ def download_dataset() -> str:
 
     try:
         import kagglehub
-
         print("[INFO] Downloading BankSim dataset via kagglehub …")
         path = kagglehub.dataset_download("ealaxi/banksim1")
         print(f"[INFO] Downloaded to: {path}")
 
-        # Locate the CSV inside the download directory
         import glob
-
         candidates = glob.glob(os.path.join(path, "**", "*.csv"), recursive=True)
         if not candidates:
             raise FileNotFoundError(
@@ -64,7 +62,6 @@ def download_dataset() -> str:
 
         os.makedirs(DATA_DIR, exist_ok=True)
         import shutil
-
         shutil.copy2(src, RAW_FILE)
         print(f"[INFO] Copied dataset to {RAW_FILE}")
         return RAW_FILE
@@ -99,7 +96,7 @@ def load_data(filepath: str | None = None) -> pd.DataFrame:
     if LABEL_COL in df.columns:
         df[LABEL_COL] = df[LABEL_COL].astype(int)
 
-    # Drop single-value / low-info columns (zipcodeOri, zipMerchant are constant)
+    # Drop single-value / low-info columns
     for col in ["zipcodeOri", "zipMerchant"]:
         if col in df.columns and df[col].nunique() <= 1:
             print(f"  Dropping constant column: {col} (unique={df[col].nunique()})")
@@ -114,7 +111,6 @@ def load_data(filepath: str | None = None) -> pd.DataFrame:
     if missing.sum() > 0:
         print("  Missing values detected:")
         print(missing[missing > 0].to_string())
-        # Drop rows with missing target; fill others with mode/median
         df.dropna(subset=[LABEL_COL], inplace=True)
         for col in df.columns:
             if df[col].isnull().sum() > 0:
@@ -151,14 +147,7 @@ def show_class_imbalance(df: pd.DataFrame) -> None:
 def encode_and_scale(
     df: pd.DataFrame,
 ) -> tuple[pd.DataFrame, dict[str, LabelEncoder], StandardScaler]:
-    """Label-encode categoricals and standard-scale numerics.
-
-    Returns
-    -------
-    df_encoded : DataFrame ready for modelling (minus ID cols & label).
-    encoders   : dict of fitted LabelEncoders.
-    scaler     : fitted StandardScaler for numeric columns.
-    """
+    """Label-encode categoricals and standard-scale numerics."""
     df_enc = df.copy()
     encoders: dict[str, LabelEncoder] = {}
 
@@ -197,15 +186,18 @@ def build_feature_matrix(
 # 6. Handle class imbalance
 # ---------------------------------------------------------------------------
 def balance_data(
-    X: pd.DataFrame, y: pd.Series, strategy: str = "oversample"
+    X: pd.DataFrame, y: pd.Series, strategy: str = "smoteenn"
 ) -> tuple[pd.DataFrame, pd.Series]:
-    """Apply random over- or under-sampling.
+    """Apply SMOTE-ENN, random over- or under-sampling.
 
     Parameters
     ----------
-    strategy : 'oversample' | 'undersample'
+    strategy : 'smoteenn' | 'oversample' | 'undersample'
     """
-    if strategy == "oversample":
+    if strategy == "smoteenn":
+        print("  [INFO] Applying SMOTE-ENN balancing...")
+        sampler = SMOTEENN(random_state=RANDOM_STATE)
+    elif strategy == "oversample":
         sampler = RandomOverSampler(random_state=RANDOM_STATE)
     elif strategy == "undersample":
         sampler = RandomUnderSampler(random_state=RANDOM_STATE)
@@ -240,7 +232,7 @@ def compare_balance_distributions(
 
 
 # ---------------------------------------------------------------------------
-# 7. Train/test split (stratified)
+# 7. Stratified train/test split
 # ---------------------------------------------------------------------------
 def stratified_split(
     X: pd.DataFrame,
@@ -254,13 +246,56 @@ def stratified_split(
 
 
 # ---------------------------------------------------------------------------
-# 8. Full preprocessing pipeline (convenience)
+# 8. Time-based train/test split (prevents data leakage)
+# ---------------------------------------------------------------------------
+def time_based_split(
+    df_encoded: pd.DataFrame,
+    test_size: float = 0.2,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.Series, pd.Series]:
+    """
+    Split data based on the step column (time) to prevent data leakage.
+    Earlier steps = training, later steps = testing.
+    """
+    if "step" not in df_encoded.columns:
+        print("[WARNING] step column not found, falling back to stratified split")
+        X, y = build_feature_matrix(df_encoded)
+        return stratified_split(X, y, test_size)
+
+    df_sorted = df_encoded.sort_values("step").reset_index(drop=True)
+    split_idx = int(len(df_sorted) * (1 - test_size))
+
+    train_df = df_sorted.iloc[:split_idx]
+    test_df  = df_sorted.iloc[split_idx:]
+
+    feature_cols = [
+        c for c in df_sorted.columns if c not in ID_COLS + [LABEL_COL]
+    ]
+
+    X_train = train_df[feature_cols]
+    y_train = train_df[LABEL_COL]
+    X_test  = test_df[feature_cols]
+    y_test  = test_df[LABEL_COL]
+
+    print(f"\n  [INFO] Time-based split on step column")
+    print(f"  Train steps  : {train_df['step'].min()} → {train_df['step'].max()}")
+    print(f"  Test steps   : {test_df['step'].min()} → {test_df['step'].max()}")
+    print(f"  Training set : {X_train.shape[0]:,} samples")
+    print(f"  Test set     : {X_test.shape[0]:,} samples")
+    print(f"  Train fraud  : {y_train.sum():,} ({y_train.mean()*100:.2f}%)")
+    print(f"  Test fraud   : {y_test.sum():,} ({y_test.mean()*100:.2f}%)")
+
+    return X_train, X_test, y_train, y_test
+
+
+# ---------------------------------------------------------------------------
+# 9. Full preprocessing pipeline (convenience)
 # ---------------------------------------------------------------------------
 def run_preprocessing(
     filepath: str | None = None,
-    balance_strategy: str = "oversample",
+    balance_strategy: str = "smoteenn",
 ) -> dict:
     """Run the full preprocessing pipeline and return a dict of artefacts."""
+
     # Load
     df_raw = load_data(filepath)
     show_class_imbalance(df_raw)
@@ -276,28 +311,40 @@ def run_preprocessing(
     X_under, y_under = balance_data(X, y, strategy="undersample")
     compare_balance_distributions(y, y_over, y_under)
 
-    # Choose the requested strategy for modelling
-    if balance_strategy == "oversample":
-        X_bal, y_bal = X_over, y_over
-    else:
-        X_bal, y_bal = X_under, y_under
+    # SMOTE-ENN balancing
+    print(f"\n{'='*60}")
+    print("SMOTE-ENN BALANCING")
+    print(f"{'='*60}")
+    X_bal, y_bal = balance_data(X, y, strategy=balance_strategy)
+    print(f"  Balanced set : {X_bal.shape[0]:,} samples")
+    print(f"  Fraud        : {y_bal.sum():,} ({y_bal.mean()*100:.2f}%)")
+    print(f"  Legit        : {(y_bal==0).sum():,} ({(y_bal==0).mean()*100:.2f}%)")
 
     # Stratified split on balanced data
     X_train, X_test, y_train, y_test = stratified_split(X_bal, y_bal)
-
     print(f"\n  Training set : {X_train.shape[0]:,} samples")
     print(f"  Test set     : {X_test.shape[0]:,} samples")
 
+    # Time-based split on raw encoded data (leakage-free)
+    print(f"\n{'='*60}")
+    print("TIME-BASED SPLIT (Leakage-Free)")
+    print(f"{'='*60}")
+    X_train_t, X_test_t, y_train_t, y_test_t = time_based_split(df_enc)
+
     return {
-        "df_raw": df_raw,
-        "df_encoded": df_enc,
-        "encoders": encoders,
-        "scaler": scaler,
-        "X": X,
-        "y": y,
-        "X_train": X_train,
-        "X_test": X_test,
-        "y_train": y_train,
-        "y_test": y_test,
-        "feature_names": list(X.columns),
+        "df_raw"        : df_raw,
+        "df_encoded"    : df_enc,
+        "encoders"      : encoders,
+        "scaler"        : scaler,
+        "X"             : X,
+        "y"             : y,
+        "X_train"       : X_train,
+        "X_test"        : X_test,
+        "y_train"       : y_train,
+        "y_test"        : y_test,
+        "X_train_time"  : X_train_t,
+        "X_test_time"   : X_test_t,
+        "y_train_time"  : y_train_t,
+        "y_test_time"   : y_test_t,
+        "feature_names" : list(X.columns),
     }

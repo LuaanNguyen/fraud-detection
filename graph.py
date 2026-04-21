@@ -3,7 +3,8 @@ graph.py
 ---------
 Builds a transaction graph in Neo4j from BankSim data.
 Customers and Merchants are nodes, Transactions are edges.
-Extracts graph features: Degree, PageRank, Betweenness Centrality.
+Extracts graph features: Degree, PageRank, Betweenness Centrality,
+Community Detection, Merchant Fraud Rate.
 """
 
 import os
@@ -17,7 +18,7 @@ from preprocessing import load_data
 # ---------------------------------------------------------------
 NEO4J_URI      = "bolt://localhost:7687"
 NEO4J_USER     = "neo4j"
-NEO4J_PASSWORD = "password123"  
+NEO4J_PASSWORD = "password123"
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -49,15 +50,16 @@ class FraudGraph:
         """
         Load transactions into Neo4j as a graph.
         Customers and Merchants = Nodes
-        Transactions = Edges
-        Uses a sample to keep it fast.
+        Transactions = Edges (weighted by amount)
+        Multiple transactions between same entities kept as separate edges.
         """
         print(f"\n[INFO] Building graph with {sample_size:,} transactions...")
+        print("  Edge weights    : transaction amount")
+        print("  Multi-edges     : kept as separate time-ordered edges")
 
-        # Sample for performance
         df_sample = df.sample(n=sample_size, random_state=42)
 
-        # Create constraints for uniqueness
+        # Create constraints
         with self.driver.session() as session:
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (c:Customer) REQUIRE c.id IS UNIQUE")
             session.run("CREATE CONSTRAINT IF NOT EXISTS FOR (m:Merchant) REQUIRE m.id IS UNIQUE")
@@ -80,14 +82,15 @@ class FraudGraph:
                         amount   : row.amount,
                         category : row.category,
                         step     : row.step,
-                        fraud    : row.fraud
+                        fraud    : row.fraud,
+                        weight   : row.amount
                     }]->(m)
                 """, batch=batch)
 
             if (i // batch_size) % 10 == 0:
                 print(f"  Inserted {min(i + batch_size, len(records)):,} / {len(records):,} records")
 
-        print(f"[INFO] Graph built successfully!")
+        print("[INFO] Graph built successfully!")
         self._print_stats()
 
     # ---------------------------------------------------------------
@@ -131,7 +134,7 @@ class FraudGraph:
         return df
 
     # ---------------------------------------------------------------
-    # 5. Extract PageRank (via Neo4j GDS)
+    # 5. Extract PageRank (via Neo4j GDS or proxy)
     # ---------------------------------------------------------------
     def extract_pagerank(self, df):
         """Run PageRank on the graph using Neo4j."""
@@ -139,7 +142,6 @@ class FraudGraph:
 
         try:
             with self.driver.session() as session:
-                # Project graph
                 session.run("""
                     CALL gds.graph.project(
                         'fraudGraph',
@@ -148,7 +150,6 @@ class FraudGraph:
                     )
                 """)
 
-                # Run PageRank
                 result = session.run("""
                     CALL gds.pageRank.stream('fraudGraph')
                     YIELD nodeId, score
@@ -156,14 +157,10 @@ class FraudGraph:
                     ORDER BY score DESC
                 """)
                 pr_data = {row["nodeId"]: row["score"] for row in result}
-
-                # Drop projected graph
                 session.run("CALL gds.graph.drop('fraudGraph')")
 
-            # Map back to dataframe
             df["customer_pagerank"] = df["customer"].map(pr_data).fillna(0)
             df["merchant_pagerank"] = df["merchant"].map(pr_data).fillna(0)
-
             print(f"  PageRank extracted for {len(pr_data):,} nodes")
 
         except Exception as e:
@@ -175,10 +172,137 @@ class FraudGraph:
         return df
 
     # ---------------------------------------------------------------
-    # 6. Extract Fraud Rate per Merchant
+    # 6. Extract Betweenness Centrality
+    # ---------------------------------------------------------------
+    def extract_betweenness_centrality(self, df):
+        """
+        Betweenness Centrality measures how often a node appears
+        on the shortest path between other nodes.
+        High betweenness = potential fraud bridge/hub.
+        Computed using networkx since GDS plugin is not available.
+        """
+        print("\n[INFO] Extracting Betweenness Centrality...")
+
+        try:
+            import networkx as nx
+
+            # Build graph from sample for performance
+            G = nx.Graph()
+
+            # Add edges
+            for _, row in df.iterrows():
+                G.add_edge(
+                    f"C_{row['customer']}",
+                    f"M_{row['merchant']}",
+                    weight=row["amount"]
+                )
+
+            print(f"  Graph nodes: {G.number_of_nodes():,}")
+            print(f"  Graph edges: {G.number_of_edges():,}")
+
+            # Compute betweenness centrality
+            # k=500 means we use 500 sample nodes for approximation (faster)
+            print("  Computing betweenness centrality (approximate)...")
+            bc = nx.betweenness_centrality(G, k=min(500, len(G.nodes)), weight="weight")
+
+            # Map back to customers and merchants
+            customer_bc = {
+                k.replace("C_", ""): v
+                for k, v in bc.items() if k.startswith("C_")
+            }
+            merchant_bc = {
+                k.replace("M_", ""): v
+                for k, v in bc.items() if k.startswith("M_")
+            }
+
+            df["customer_betweenness"] = df["customer"].map(customer_bc).fillna(0)
+            df["merchant_betweenness"] = df["merchant"].map(merchant_bc).fillna(0)
+
+            print(f"  Customer betweenness — mean: {df['customer_betweenness'].mean():.6f}")
+            print(f"  Merchant betweenness — mean: {df['merchant_betweenness'].mean():.6f}")
+
+        except ImportError:
+            print("  [WARNING] networkx not installed. Installing...")
+            os.system("pip install networkx")
+            df["customer_betweenness"] = 0
+            df["merchant_betweenness"] = 0
+
+        except Exception as e:
+            print(f"  [WARNING] Betweenness centrality failed: {e}")
+            df["customer_betweenness"] = 0
+            df["merchant_betweenness"] = 0
+
+        return df
+
+    # ---------------------------------------------------------------
+    # 7. Extract Community Detection
+    # ---------------------------------------------------------------
+    def extract_community_detection(self, df):
+        """
+        Community Detection groups customers and merchants into
+        clusters based on their transaction patterns.
+        Fraud often concentrates in specific communities.
+        Uses Louvain method via networkx.
+        """
+        print("\n[INFO] Extracting Community Detection...")
+
+        try:
+            import networkx as nx
+            from collections import defaultdict
+
+            # Build graph
+            G = nx.Graph()
+            for _, row in df.iterrows():
+                G.add_edge(
+                    f"C_{row['customer']}",
+                    f"M_{row['merchant']}",
+                    weight=row["amount"]
+                )
+
+            # Use connected components as community proxy
+            # (Louvain requires python-louvain package)
+            print("  Using connected components as community labels...")
+            communities = {}
+            for i, component in enumerate(nx.connected_components(G)):
+                for node in component:
+                    communities[node] = i
+
+            total_communities = len(set(communities.values()))
+            print(f"  Total communities found: {total_communities:,}")
+
+            # Map back
+            customer_community = {
+                k.replace("C_", ""): v
+                for k, v in communities.items() if k.startswith("C_")
+            }
+            merchant_community = {
+                k.replace("M_", ""): v
+                for k, v in communities.items() if k.startswith("M_")
+            }
+
+            df["customer_community"] = df["customer"].map(customer_community).fillna(-1).astype(int)
+            df["merchant_community"] = df["merchant"].map(merchant_community).fillna(-1).astype(int)
+
+            # Compute fraud rate per community
+            community_fraud = df.groupby("customer_community")["fraud"].mean().reset_index()
+            community_fraud.columns = ["customer_community", "community_fraud_rate"]
+            df = df.merge(community_fraud, on="customer_community", how="left")
+
+            print(f"  Communities with >50% fraud rate: {(community_fraud['community_fraud_rate'] > 0.5).sum()}")
+
+        except Exception as e:
+            print(f"  [WARNING] Community detection failed: {e}")
+            df["customer_community"] = 0
+            df["merchant_community"] = 0
+            df["community_fraud_rate"] = 0
+
+        return df
+
+    # ---------------------------------------------------------------
+    # 8. Extract Fraud Rate per Merchant
     # ---------------------------------------------------------------
     def extract_merchant_fraud_rate(self, df):
-        """Calculate fraud rate per merchant — highly informative feature."""
+        """Calculate fraud rate per merchant."""
         print("\n[INFO] Extracting Merchant Fraud Rate...")
 
         merchant_fraud = df.groupby("merchant")["fraud"].agg(["sum", "count"]).reset_index()
@@ -195,7 +319,7 @@ class FraudGraph:
         return df
 
     # ---------------------------------------------------------------
-    # 7. Full graph feature extraction pipeline
+    # 9. Full graph feature extraction pipeline
     # ---------------------------------------------------------------
     def extract_graph_features(self, df):
         """Run all graph feature extractions and return enriched dataframe."""
@@ -205,6 +329,8 @@ class FraudGraph:
 
         df = self.extract_degree_centrality(df)
         df = self.extract_pagerank(df)
+        df = self.extract_betweenness_centrality(df)
+        df = self.extract_community_detection(df)
         df = self.extract_merchant_fraud_rate(df)
 
         # Save enriched features
@@ -212,11 +338,18 @@ class FraudGraph:
             "customer", "merchant", "fraud",
             "customer_degree", "merchant_degree",
             "customer_pagerank", "merchant_pagerank",
-            "merchant_fraud_rate"
+            "customer_betweenness", "merchant_betweenness",
+            "customer_community", "merchant_community",
+            "community_fraud_rate", "merchant_fraud_rate"
         ]
+
+        # Only keep columns that exist
+        graph_features = [c for c in graph_features if c in df.columns]
+
         out_path = os.path.join(RESULTS_DIR, "graph_features.csv")
         df[graph_features].to_csv(out_path, index=False)
         print(f"\n  [Saved] Graph features → {out_path}")
+        print(f"  Total graph features: {len(graph_features) - 3}")
 
         return df
 
