@@ -3,61 +3,99 @@
 main.py
 --------
 End-to-end orchestration of the Banking Fraud Detection pipeline.
-
-Usage:
-    python main.py # currently, only download the BankSim dataset and perform EDA + balancing
+Runs all experiments in sequence:
+  Step 1 — Preprocessing + SMOTE-ENN + Time-based split
+  Step 2 — EDA visualizations
+  Step 3 — E1: Baseline ML models
+  Step 4 — E2: Graph construction + feature extraction
+  Step 5 — E2: Hybrid models
+  Step 6 — E4: Standalone GraphSAGE
+  Step 7 — E3: GraphSAGE embeddings → RF + MLP
+  Step 8 — E5: Clustering analysis
 """
 
-import argparse
-import sys
 import warnings
-
-import matplotlib
-matplotlib.use("Agg")  # non-interactive backend for saving plots
-
 warnings.filterwarnings("ignore")
 
-from preprocessing import run_preprocessing
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Banking Fraud Detection — Baseline vs Graph-Enhanced Models"
-    )
-    
-    parser.add_argument(
-        "--data",
-        type=str,
-        default=None,
-        help="Path to BankSim CSV file (default: auto-download)",
-    )
-    
-    parser.add_argument(
-        "--balance",
-        type=str,
-        choices=["oversample", "undersample"],
-        default="oversample",
-        help="Class balancing strategy (default: oversample)",
-    )
-    
-    return parser.parse_args()
-
-
-def main() -> None:
-    args = parse_args()
-
+def main():
     print("\n" + "=" * 70)
     print("   BANKING FRAUD DETECTION PIPELINE")
-    print("   Baseline (Tabular) vs Graph-Enhanced Models")
+    print("   Baseline (Tabular) vs Graph-Enhanced vs GNN Models")
     print("=" * 70)
 
     # ---------------------------------------------------------------
     # Step 1: Preprocessing
     # ---------------------------------------------------------------
-    prep = run_preprocessing(
-        filepath=args.data,
-        balance_strategy=args.balance,
-    )
+    print("\n[STEP 1] Preprocessing + SMOTE-ENN + Time-based Split")
+    from preprocessing import run_preprocessing
+    prep = run_preprocessing(balance_strategy="smoteenn")
+    print(" Preprocessing complete")
+
+    # ---------------------------------------------------------------
+    # Step 2: EDA
+    # ---------------------------------------------------------------
+    print("\n[STEP 2] Exploratory Data Analysis")
+    from eda import run_eda
+    run_eda()
+    print(" EDA complete")
+
+    # ---------------------------------------------------------------
+    # Step 3: E1 Baseline Models
+    # ---------------------------------------------------------------
+    print("\n[STEP 3] E1 — Baseline ML Models")
+    from models import run_baseline_models
+    baseline_results = run_baseline_models()
+    print(" Baseline models complete")
+
+    # ---------------------------------------------------------------
+    # Step 4: E2 Graph Construction
+    # ---------------------------------------------------------------
+    print("\n[STEP 4] E2 — Graph Construction + Feature Extraction")
+    from graph import run_graph_pipeline
+    run_graph_pipeline()
+    print(" Graph pipeline complete")
+
+    # ---------------------------------------------------------------
+    # Step 5: E2 Hybrid Models
+    # ---------------------------------------------------------------
+    print("\n[STEP 5] E2 — Hybrid Models (Graph + Tabular)")
+    from hybrid_models import run_hybrid_models
+    run_hybrid_models()
+    print(" Hybrid models complete")
+
+    # ---------------------------------------------------------------
+    # Step 6: E4 Standalone GraphSAGE
+    # ---------------------------------------------------------------
+    print("\n[STEP 6] E4 — Standalone GraphSAGE")
+    from graphsage import run_graphsage
+    run_graphsage()
+    print(" GraphSAGE complete")
+
+    # ---------------------------------------------------------------
+    # Step 7: E3 Embedding Models
+    # ---------------------------------------------------------------
+    print("\n[STEP 7] E3 — GraphSAGE Embeddings → RF + MLP")
+    from embedding_models import run_embedding_models
+    run_embedding_models()
+    print(" Embedding models complete")
+
+    # ---------------------------------------------------------------
+    # Step 8: E5 Clustering
+    # ---------------------------------------------------------------
+    print("\n[STEP 8] E5 — Unsupervised Clustering")
+    from clustering import run_clustering
+    run_clustering()
+    print(" Clustering complete")
+
+    # ---------------------------------------------------------------
+    # Done
+    # ---------------------------------------------------------------
+    print("\n" + "=" * 70)
+    print("   PIPELINE COMPLETE")
+    print("   All results saved to results/")
+    print("   GitHub: https://github.com/LuaanNguyen/fraud-detection")
+    print("=" * 70)
+
 
 if __name__ == "__main__":
     main()

@@ -2,8 +2,9 @@
 models.py
 ----------
 Baseline supervised ML models for fraud detection.
-Logistic Regression, SVM, Random Forest, XGBoost.
+Logistic Regression, Random Forest, XGBoost.
 Evaluated using Precision, Recall, F1-Score, and PR-AUC.
+Includes hyperparameter tuning via RandomizedSearchCV.
 """
 
 import os
@@ -17,6 +18,7 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
+from sklearn.model_selection import RandomizedSearchCV
 
 from sklearn.metrics import (
     precision_score, recall_score, f1_score,
@@ -29,11 +31,9 @@ from preprocessing import run_preprocessing
 
 warnings.filterwarnings("ignore")
 
-# ---------------------------------------------------------------
-# Output directory for plots
-# ---------------------------------------------------------------
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
+RANDOM_STATE = 42
 
 
 # ---------------------------------------------------------------
@@ -45,13 +45,9 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test):
     print(f"  {name}")
     print(f"{'='*60}")
 
-    # Train
     model.fit(X_train, y_train)
-
-    # Predict
     y_pred = model.predict(X_test)
 
-    # Probability scores for PR-AUC
     if hasattr(model, "predict_proba"):
         y_scores = model.predict_proba(X_test)[:, 1]
     elif hasattr(model, "decision_function"):
@@ -59,7 +55,6 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test):
     else:
         y_scores = y_pred
 
-    # Metrics
     precision = precision_score(y_test, y_pred, zero_division=0)
     recall    = recall_score(y_test, y_pred, zero_division=0)
     f1        = f1_score(y_test, y_pred, zero_division=0)
@@ -82,12 +77,84 @@ def evaluate_model(name, model, X_train, X_test, y_train, y_test):
 
 
 # ---------------------------------------------------------------
-# 2. Plot PR curves for all models
+# 2. Hyperparameter Tuning
+# ---------------------------------------------------------------
+def tune_random_forest(X_train, y_train):
+    """Tune Random Forest using RandomizedSearchCV."""
+    print("\n[INFO] Tuning Random Forest...")
+
+    param_dist = {
+        "n_estimators"      : [100, 200, 300],
+        "max_depth"         : [None, 10, 20, 30],
+        "min_samples_split" : [2, 5, 10],
+        "min_samples_leaf"  : [1, 2, 4],
+        "max_features"      : ["sqrt", "log2"],
+    }
+
+    rf = RandomForestClassifier(
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+        n_jobs=-1
+    )
+
+    search = RandomizedSearchCV(
+        rf, param_dist,
+        n_iter=10,
+        scoring="average_precision",
+        cv=3,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbose=1
+    )
+
+    search.fit(X_train, y_train)
+    print(f"  Best RF params : {search.best_params_}")
+    print(f"  Best RF PR-AUC : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+def tune_xgboost(X_train, y_train):
+    """Tune XGBoost using RandomizedSearchCV."""
+    print("\n[INFO] Tuning XGBoost...")
+
+    param_dist = {
+        "n_estimators"  : [100, 200, 300],
+        "max_depth"     : [3, 5, 7, 9],
+        "learning_rate" : [0.01, 0.05, 0.1, 0.2],
+        "subsample"     : [0.6, 0.8, 1.0],
+        "colsample_bytree": [0.6, 0.8, 1.0],
+        "scale_pos_weight": [81],
+    }
+
+    xgb = XGBClassifier(
+        random_state=RANDOM_STATE,
+        eval_metric="aucpr",
+        verbosity=0
+    )
+
+    search = RandomizedSearchCV(
+        xgb, param_dist,
+        n_iter=10,
+        scoring="average_precision",
+        cv=3,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbose=1
+    )
+
+    search.fit(X_train, y_train)
+    print(f"  Best XGB params : {search.best_params_}")
+    print(f"  Best XGB PR-AUC : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+# ---------------------------------------------------------------
+# 3. Plot PR curves
 # ---------------------------------------------------------------
 def plot_pr_curves(results, y_test):
     """Plot Precision-Recall curves for all models."""
     plt.figure(figsize=(10, 6))
-    colors = ["#8C1D40", "#FFC627", "#1A6B3C", "#1F77B4"]
+    colors = ["#8C1D40", "#FFC627", "#1A6B3C"]
 
     for i, res in enumerate(results):
         precision_vals, recall_vals, _ = precision_recall_curve(
@@ -113,7 +180,7 @@ def plot_pr_curves(results, y_test):
 
 
 # ---------------------------------------------------------------
-# 3. Plot comparison bar chart
+# 4. Plot comparison bar chart
 # ---------------------------------------------------------------
 def plot_comparison(summary_df):
     """Bar chart comparing all models across metrics."""
@@ -143,12 +210,14 @@ def plot_comparison(summary_df):
 
 
 # ---------------------------------------------------------------
-# 4. Plot confusion matrices
+# 5. Plot confusion matrices
 # ---------------------------------------------------------------
 def plot_confusion_matrices(results, y_test):
     """Plot confusion matrix for each model."""
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    axes = axes.flatten()
+    n = len(results)
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 5))
+    if n == 1:
+        axes = [axes]
 
     for i, res in enumerate(results):
         y_pred = (res["y_scores"] >= 0.5).astype(int)
@@ -170,12 +239,11 @@ def plot_confusion_matrices(results, y_test):
 
 
 # ---------------------------------------------------------------
-# 5. Run all baseline models
+# 6. Run all baseline models
 # ---------------------------------------------------------------
 def run_baseline_models():
-    """Full pipeline: preprocess → train → evaluate → plot."""
+    """Full pipeline: preprocess → tune → train → evaluate → plot."""
 
-    # Load preprocessed data
     print("\nLoading preprocessed data...")
     prep = run_preprocessing(balance_strategy="oversample")
 
@@ -184,29 +252,30 @@ def run_baseline_models():
     y_train = prep["y_train"]
     y_test  = prep["y_test"]
 
-    # Define models
+    print(f"\n{'='*60}")
+    print("  HYPERPARAMETER TUNING")
+    print(f"{'='*60}")
+
+    # Tune RF and XGBoost
+    best_rf  = tune_random_forest(X_train, y_train)
+    best_xgb = tune_xgboost(X_train, y_train)
+
+    # Define models — LR with defaults, RF and XGBoost tuned
     models = [
         ("Logistic Regression", LogisticRegression(
-            max_iter=1000, class_weight="balanced", random_state=42
+            max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
         )),
-        ("Random Forest", RandomForestClassifier(
-            n_estimators=100, class_weight="balanced",
-            random_state=42, n_jobs=-1
-        )),
-        ("XGBoost", XGBClassifier(
-            n_estimators=100, scale_pos_weight=81,
-            random_state=42, eval_metric="aucpr",
-            verbosity=0
-        )),
+        ("Random Forest (Tuned)", best_rf),
+        ("XGBoost (Tuned)", best_xgb),
     ]
 
-    # Train and evaluate each model
+    # Train and evaluate
     results = []
     for name, model in models:
         res = evaluate_model(name, model, X_train, X_test, y_train, y_test)
         results.append(res)
 
-    # Summary table
+    # Summary
     summary_df = pd.DataFrame([
         {k: v for k, v in r.items() if k != "y_scores"}
         for r in results
@@ -217,12 +286,10 @@ def run_baseline_models():
     print(f"{'='*60}")
     print(summary_df.to_string(index=False))
 
-    # Save summary to CSV
     csv_path = os.path.join(RESULTS_DIR, "baseline_results.csv")
     summary_df.to_csv(csv_path, index=False)
     print(f"\n  [Saved] Results CSV → {csv_path}")
 
-    # Plots
     plot_pr_curves(results, y_test)
     plot_comparison(summary_df)
     plot_confusion_matrices(results, y_test)
@@ -230,8 +297,5 @@ def run_baseline_models():
     return summary_df
 
 
-# ---------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------
 if __name__ == "__main__":
     run_baseline_models()

@@ -1,5 +1,4 @@
 Model,Precision,Recall,F1-Score,PR-AUC
 Logistic Regression,0.9491,0.8664,0.9059,0.9714
-SVM,0.2617,0.3141,0.2855,0.4904
-Random Forest,0.9949,1.0,0.9975,0.999
-XGBoost,0.9432,1.0,0.9708,0.9953
+Random Forest (Tuned),0.9867,1.0,0.9933,0.9996
+XGBoost (Tuned),0.9524,1.0,0.9756,0.9966
