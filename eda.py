@@ -1,291 +1,281 @@
 """
 eda.py
 -------
-Exploratory Data Analysis for the BankSim fraud-detection dataset.
-Generates distribution plots, correlation heatmaps, and fraud-pattern
-analyses.  All figures are saved to the output/eda/ directory.
+Exploratory Data Analysis for BankSim fraud detection dataset.
+Generates visualizations showing fraud patterns by category,
+amount, time, merchant, and customer demographics.
 """
 
 import os
 import warnings
-
+import pandas as pd
+import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
 import seaborn as sns
+
+from preprocessing import load_data
 
 warnings.filterwarnings("ignore")
 
-EDA_DIR = os.path.join(os.path.dirname(__file__), "output", "eda")
-os.makedirs(EDA_DIR, exist_ok=True)
+RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results", "eda")
+os.makedirs(RESULTS_DIR, exist_ok=True)
 
-LABEL_COL = "fraud"
-
-
-def _save(fig, name: str) -> None:
-    path = os.path.join(EDA_DIR, name)
-    fig.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"  [Saved] {path}")
+# ASU colors
+MAROON = "#8C1D40"
+GOLD   = "#FFC627"
+GRAY   = "#64748B"
 
 
-# ------------------------------------------------------------------
-# 1. Descriptive statistics
-# ------------------------------------------------------------------
-def print_summary_statistics(df: pd.DataFrame) -> None:
-    """Print basic shape, dtypes, and descriptive stats."""
-    print(f"\n{'='*60}")
-    print("  SUMMARY STATISTICS")
-    print(f"{'='*60}")
-    print(f"  Rows    : {df.shape[0]:,}")
-    print(f"  Columns : {df.shape[1]}")
-    print(f"\n  Dtypes:\n{df.dtypes.to_string()}")
-    print(f"\n  Descriptive stats (numeric):")
-    print(df.describe().to_string())
-    print(f"\n  Unique values per column:")
-    for col in df.columns:
-        print(f"    {col:<20s}: {df[col].nunique():>8,}")
-
-
-# ------------------------------------------------------------------
-# 2. Class distribution
-# ------------------------------------------------------------------
-def plot_class_distribution(df: pd.DataFrame) -> None:
-    """Bar chart + pie chart of fraud vs legitimate."""
-    print(f"\n{'='*60}")
-    print("  CLASS DISTRIBUTION")
-    print(f"{'='*60}")
-
-    counts = df[LABEL_COL].value_counts().sort_index()
-    labels = ["Legitimate", "Fraud"]
-
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
-
-    colors = ["#2ecc71", "#e74c3c"]
-    ax1.bar(labels, counts.values, color=colors, edgecolor="black", linewidth=0.5)
-    for i, v in enumerate(counts.values):
-        ax1.text(i, v + v * 0.02, f"{v:,}", ha="center", fontsize=11, fontweight="bold")
-    ax1.set_ylabel("Count")
-    ax1.set_title("Transaction Counts", fontsize=13, fontweight="bold")
-    ax1.ticklabel_format(style="plain", axis="y")
-
-    ax2.pie(
-        counts.values, labels=labels, autopct="%1.2f%%",
-        colors=colors, startangle=90, textprops={"fontsize": 11},
-        wedgeprops={"edgecolor": "black", "linewidth": 0.5},
-    )
-    ax2.set_title("Class Proportions", fontsize=13, fontweight="bold")
-
+# ---------------------------------------------------------------
+# 1. Class Distribution
+# ---------------------------------------------------------------
+def plot_class_distribution(df):
+    fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle("Class Distribution — Fraud vs Legitimate", fontsize=15, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "class_distribution.png")
+
+    # Count plot
+    counts = df["fraud"].value_counts()
+    axes[0].bar(["Legitimate", "Fraud"], counts.values,
+                color=[GRAY, MAROON], alpha=0.85)
+    axes[0].set_title("Transaction Counts", fontsize=13)
+    axes[0].set_ylabel("Count")
+    for i, v in enumerate(counts.values):
+        axes[0].text(i, v + 1000, f"{v:,}", ha="center", fontweight="bold")
+
+    # Pie chart
+    axes[1].pie(counts.values, labels=["Legitimate (98.8%)", "Fraud (1.2%)"],
+                colors=[GRAY, MAROON], autopct="%1.1f%%", startangle=90)
+    axes[1].set_title("Class Proportion", fontsize=13)
+
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "01_class_distribution.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Class distribution → {path}")
 
 
-# ------------------------------------------------------------------
-# 3. Transaction amount distributions
-# ------------------------------------------------------------------
-def plot_amount_distributions(df: pd.DataFrame) -> None:
-    """Histograms of transaction amounts by class."""
-    print(f"\n{'='*60}")
-    print("  AMOUNT DISTRIBUTIONS")
-    print(f"{'='*60}")
+# ---------------------------------------------------------------
+# 2. Fraud by Transaction Category
+# ---------------------------------------------------------------
+def plot_fraud_by_category(df):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle("Fraud Analysis by Transaction Category", fontsize=15, fontweight="bold")
 
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    # Fraud count by category
+    cat_fraud = df.groupby("category")["fraud"].agg(["sum", "count"]).reset_index()
+    cat_fraud.columns = ["category", "fraud_count", "total"]
+    cat_fraud["fraud_rate"] = cat_fraud["fraud_count"] / cat_fraud["total"] * 100
+    cat_fraud = cat_fraud.sort_values("fraud_rate", ascending=True)
 
-    ax = axes[0]
-    ax.hist(df["amount"], bins=100, color="#3498db", edgecolor="black", linewidth=0.3)
-    ax.set_title("All Transactions", fontsize=13, fontweight="bold")
-    ax.set_xlabel("Amount")
-    ax.set_ylabel("Frequency")
-    ax.set_yscale("log")
+    axes[0].barh(cat_fraud["category"], cat_fraud["fraud_count"],
+                 color=MAROON, alpha=0.85)
+    axes[0].set_title("Fraud Count by Category", fontsize=13)
+    axes[0].set_xlabel("Number of Fraud Transactions")
 
-    for i, (label, color) in enumerate([(0, "#2ecc71"), (1, "#e74c3c")]):
-        ax = axes[i + 1]
-        subset = df[df[LABEL_COL] == label]["amount"]
-        ax.hist(subset, bins=80, color=color, edgecolor="black", linewidth=0.3)
-        tag = "Legitimate" if label == 0 else "Fraud"
-        ax.set_title(f"{tag} (n={len(subset):,})", fontsize=13, fontweight="bold")
-        ax.set_xlabel("Amount")
-        ax.set_ylabel("Frequency")
+    axes[1].barh(cat_fraud["category"], cat_fraud["fraud_rate"],
+                 color=GOLD, alpha=0.85)
+    axes[1].set_title("Fraud Rate by Category (%)", fontsize=13)
+    axes[1].set_xlabel("Fraud Rate (%)")
 
-    fig.suptitle("Transaction Amount Distributions", fontsize=15, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "amount_distributions.png")
-
-    legit = df[df[LABEL_COL] == 0]["amount"]
-    fraud = df[df[LABEL_COL] == 1]["amount"]
-    print(f"  Legit  — mean: {legit.mean():.2f}, median: {legit.median():.2f}, std: {legit.std():.2f}")
-    print(f"  Fraud  — mean: {fraud.mean():.2f}, median: {fraud.median():.2f}, std: {fraud.std():.2f}")
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "02_fraud_by_category.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Fraud by category → {path}")
 
 
-# ------------------------------------------------------------------
-# 4. Categorical feature breakdowns
-# ------------------------------------------------------------------
-def plot_categorical_fraud_rates(df: pd.DataFrame) -> None:
-    """Fraud rate by age, gender, and transaction category."""
-    print(f"\n{'='*60}")
-    print("  CATEGORICAL FRAUD RATES")
-    print(f"{'='*60}")
+# ---------------------------------------------------------------
+# 3. Transaction Amount Distribution
+# ---------------------------------------------------------------
+def plot_amount_distribution(df):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle("Transaction Amount Distribution", fontsize=15, fontweight="bold")
 
-    cat_cols = [c for c in ["age", "gender", "category"] if c in df.columns]
-    if not cat_cols:
-        print("  No categorical columns found, skipping.")
-        return
+    fraud_amounts = df[df["fraud"] == 1]["amount"]
+    legit_amounts = df[df["fraud"] == 0]["amount"]
 
-    n = len(cat_cols)
-    fig, axes = plt.subplots(1, n, figsize=(6 * n, 5))
-    if n == 1:
-        axes = [axes]
+    axes[0].hist(legit_amounts, bins=50, color=GRAY, alpha=0.7, label="Legitimate")
+    axes[0].hist(fraud_amounts, bins=50, color=MAROON, alpha=0.7, label="Fraud")
+    axes[0].set_title("Amount Distribution (Full Range)", fontsize=13)
+    axes[0].set_xlabel("Transaction Amount")
+    axes[0].set_ylabel("Count")
+    axes[0].legend()
 
-    for ax, col in zip(axes, cat_cols):
-        stats = df.groupby(col)[LABEL_COL].agg(["sum", "count"]).reset_index()
-        stats["fraud_rate"] = stats["sum"] / stats["count"]
-        stats = stats.sort_values("fraud_rate", ascending=False)
+    # Zoomed in
+    axes[1].hist(legit_amounts[legit_amounts < 2000], bins=50, color=GRAY, alpha=0.7, label="Legitimate")
+    axes[1].hist(fraud_amounts[fraud_amounts < 2000], bins=50, color=MAROON, alpha=0.7, label="Fraud")
+    axes[1].set_title("Amount Distribution (< $2000)", fontsize=13)
+    axes[1].set_xlabel("Transaction Amount")
+    axes[1].set_ylabel("Count")
+    axes[1].legend()
 
-        bars = ax.bar(
-            stats[col].astype(str), stats["fraud_rate"],
-            color="#e74c3c", edgecolor="black", linewidth=0.3, alpha=0.85,
-        )
-        ax.set_title(f"Fraud Rate by {col.title()}", fontsize=13, fontweight="bold")
-        ax.set_xlabel(col.title())
-        ax.set_ylabel("Fraud Rate")
-        ax.tick_params(axis="x", rotation=45)
-
-        for bar, rate in zip(bars, stats["fraud_rate"]):
-            ax.text(
-                bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.002,
-                f"{rate:.2%}", ha="center", fontsize=8,
-            )
-
-    fig.suptitle("Fraud Rate by Categorical Features", fontsize=15, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "categorical_fraud_rates.png")
-
-    for col in cat_cols:
-        stats = df.groupby(col)[LABEL_COL].mean()
-        print(f"\n  {col}:")
-        for val, rate in stats.sort_values(ascending=False).items():
-            print(f"    {val:<20s}: {rate:.4%}")
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "03_amount_distribution.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Amount distribution → {path}")
 
 
-# ------------------------------------------------------------------
-# 5. Correlation heatmap
-# ------------------------------------------------------------------
-def plot_correlation_heatmap(df: pd.DataFrame) -> None:
-    """Heatmap of feature correlations (numeric + encoded categoricals)."""
-    print(f"\n{'='*60}")
-    print("  CORRELATION HEATMAP")
-    print(f"{'='*60}")
+# ---------------------------------------------------------------
+# 4. Fraud Over Time (step column)
+# ---------------------------------------------------------------
+def plot_fraud_over_time(df):
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    fig.suptitle("Fraud Patterns Over Time", fontsize=15, fontweight="bold")
 
-    df_num = df.copy()
-    for col in ["age", "gender", "category"]:
-        if col in df_num.columns and df_num[col].dtype == "object":
-            df_num[col] = pd.factorize(df_num[col])[0]
+    time_data = df.groupby("step")["fraud"].agg(["sum", "count"]).reset_index()
+    time_data.columns = ["step", "fraud_count", "total"]
+    time_data["fraud_rate"] = time_data["fraud_count"] / time_data["total"] * 100
 
-    drop = ["customer", "merchant", "step", "zipcodeOri", "zipMerchant"]
-    drop = [c for c in drop if c in df_num.columns]
-    df_num = df_num.drop(columns=drop)
+    axes[0].plot(time_data["step"], time_data["fraud_count"],
+                 color=MAROON, linewidth=1.5)
+    axes[0].fill_between(time_data["step"], time_data["fraud_count"],
+                         alpha=0.3, color=MAROON)
+    axes[0].set_title("Fraud Count per Time Step", fontsize=13)
+    axes[0].set_xlabel("Time Step")
+    axes[0].set_ylabel("Fraud Count")
+    axes[0].grid(alpha=0.3)
 
-    numeric_cols = df_num.select_dtypes(include=[np.number]).columns.tolist()
-    corr = df_num[numeric_cols].corr()
+    axes[1].plot(time_data["step"], time_data["fraud_rate"],
+                 color=GOLD, linewidth=1.5)
+    axes[1].fill_between(time_data["step"], time_data["fraud_rate"],
+                         alpha=0.3, color=GOLD)
+    axes[1].set_title("Fraud Rate (%) per Time Step", fontsize=13)
+    axes[1].set_xlabel("Time Step")
+    axes[1].set_ylabel("Fraud Rate (%)")
+    axes[1].grid(alpha=0.3)
+
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "04_fraud_over_time.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Fraud over time → {path}")
+
+
+# ---------------------------------------------------------------
+# 5. Fraud by Customer Age and Gender
+# ---------------------------------------------------------------
+def plot_fraud_by_demographics(df):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle("Fraud by Customer Demographics", fontsize=15, fontweight="bold")
+
+    # By age
+    age_fraud = df.groupby("age")["fraud"].agg(["sum", "count"]).reset_index()
+    age_fraud.columns = ["age", "fraud_count", "total"]
+    age_fraud["fraud_rate"] = age_fraud["fraud_count"] / age_fraud["total"] * 100
+    age_fraud = age_fraud.sort_values("age")
+
+    axes[0].bar(age_fraud["age"].astype(str), age_fraud["fraud_rate"],
+                color=MAROON, alpha=0.85)
+    axes[0].set_title("Fraud Rate by Age Group", fontsize=13)
+    axes[0].set_xlabel("Age Group")
+    axes[0].set_ylabel("Fraud Rate (%)")
+    axes[0].grid(axis="y", alpha=0.3)
+
+    # By gender
+    gender_fraud = df.groupby("gender")["fraud"].agg(["sum", "count"]).reset_index()
+    gender_fraud.columns = ["gender", "fraud_count", "total"]
+    gender_fraud["fraud_rate"] = gender_fraud["fraud_count"] / gender_fraud["total"] * 100
+
+    axes[1].bar(gender_fraud["gender"], gender_fraud["fraud_rate"],
+                color=GOLD, alpha=0.85)
+    axes[1].set_title("Fraud Rate by Gender", fontsize=13)
+    axes[1].set_xlabel("Gender")
+    axes[1].set_ylabel("Fraud Rate (%)")
+    axes[1].grid(axis="y", alpha=0.3)
+
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "05_fraud_by_demographics.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Fraud by demographics → {path}")
+
+
+# ---------------------------------------------------------------
+# 6. Top Merchants by Fraud Rate
+# ---------------------------------------------------------------
+def plot_merchant_fraud(df):
+    fig, axes = plt.subplots(1, 2, figsize=(14, 6))
+    fig.suptitle("Merchant Fraud Analysis", fontsize=15, fontweight="bold")
+
+    merchant_stats = df.groupby("merchant")["fraud"].agg(["sum", "count"]).reset_index()
+    merchant_stats.columns = ["merchant", "fraud_count", "total"]
+    merchant_stats["fraud_rate"] = merchant_stats["fraud_count"] / merchant_stats["total"] * 100
+
+    # Top 15 by fraud count
+    top_count = merchant_stats.nlargest(15, "fraud_count")
+    axes[0].barh(range(len(top_count)), top_count["fraud_count"],
+                 color=MAROON, alpha=0.85)
+    axes[0].set_yticks(range(len(top_count)))
+    axes[0].set_yticklabels([f"M{i+1}" for i in range(len(top_count))], fontsize=9)
+    axes[0].set_title("Top 15 Merchants by Fraud Count", fontsize=13)
+    axes[0].set_xlabel("Fraud Count")
+
+    # Top 15 by fraud rate
+    top_rate = merchant_stats.nlargest(15, "fraud_rate")
+    axes[1].barh(range(len(top_rate)), top_rate["fraud_rate"],
+                 color=GOLD, alpha=0.85)
+    axes[1].set_yticks(range(len(top_rate)))
+    axes[1].set_yticklabels([f"M{i+1}" for i in range(len(top_rate))], fontsize=9)
+    axes[1].set_title("Top 15 Merchants by Fraud Rate (%)", fontsize=13)
+    axes[1].set_xlabel("Fraud Rate (%)")
+
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "06_merchant_fraud.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Merchant fraud → {path}")
+
+
+# ---------------------------------------------------------------
+# 7. Correlation Heatmap
+# ---------------------------------------------------------------
+def plot_correlation_heatmap(df):
+    from sklearn.preprocessing import LabelEncoder
+
+    df_enc = df.copy()
+    for col in ["age", "gender", "category", "customer", "merchant"]:
+        if col in df_enc.columns:
+            df_enc[col] = LabelEncoder().fit_transform(df_enc[col].astype(str))
+
+    corr = df_enc.corr()
 
     fig, ax = plt.subplots(figsize=(10, 8))
-    sns.heatmap(
-        corr, annot=True, fmt=".2f", cmap="RdBu_r", center=0,
-        square=True, linewidths=0.5, ax=ax,
-    )
-    ax.set_title("Feature Correlation Matrix", fontsize=15, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "correlation_heatmap.png")
+    sns.heatmap(corr, annot=True, fmt=".2f", cmap="RdYlGn",
+                center=0, ax=ax, square=True, linewidths=0.5)
+    ax.set_title("Feature Correlation Heatmap", fontsize=15, fontweight="bold")
 
-    fraud_corr = corr[LABEL_COL].drop(LABEL_COL).sort_values(key=abs, ascending=False)
-    print("  Correlation with fraud label:")
-    for feat, val in fraud_corr.items():
-        print(f"    {feat:<20s}: {val:+.4f}")
+    plt.tight_layout()
+    path = os.path.join(RESULTS_DIR, "07_correlation_heatmap.png")
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
+    print(f"  [Saved] Correlation heatmap → {path}")
 
 
-# ------------------------------------------------------------------
-# 6. Fraud patterns — top merchants and temporal analysis
-# ------------------------------------------------------------------
-def plot_fraud_patterns(df: pd.DataFrame) -> None:
-    """Top-fraud merchants and fraud rate over time steps."""
+# ---------------------------------------------------------------
+# 8. Run all EDA
+# ---------------------------------------------------------------
+def run_eda():
     print(f"\n{'='*60}")
-    print("  FRAUD PATTERNS")
+    print("  EXPLORATORY DATA ANALYSIS")
     print(f"{'='*60}")
 
-    fig, axes = plt.subplots(1, 2, figsize=(16, 6))
+    df = load_data()
 
-    # Top 15 merchants by fraud count
-    if "merchant" in df.columns:
-        merch = df[df[LABEL_COL] == 1].groupby("merchant").size().sort_values(ascending=False).head(15)
-        ax = axes[0]
-        ax.barh(merch.index.astype(str), merch.values, color="#e74c3c", edgecolor="black", linewidth=0.3)
-        ax.set_xlabel("Fraud Transaction Count")
-        ax.set_title("Top 15 Merchants by Fraud Count", fontsize=13, fontweight="bold")
-        ax.invert_yaxis()
-        print(f"  Top 5 fraud merchants:")
-        for m, c in merch.head(5).items():
-            print(f"    {m}: {c:,} fraud txns")
-
-    # Fraud rate per time step
-    if "step" in df.columns:
-        step_stats = df.groupby("step")[LABEL_COL].agg(["sum", "count"]).reset_index()
-        step_stats["fraud_rate"] = step_stats["sum"] / step_stats["count"]
-        ax = axes[1]
-        ax.plot(step_stats["step"], step_stats["fraud_rate"], color="#e74c3c", linewidth=1.5)
-        ax.fill_between(step_stats["step"], step_stats["fraud_rate"], alpha=0.2, color="#e74c3c")
-        ax.set_xlabel("Time Step")
-        ax.set_ylabel("Fraud Rate")
-        ax.set_title("Fraud Rate Over Time", fontsize=13, fontweight="bold")
-        ax.grid(alpha=0.3)
-
-    fig.suptitle("Fraud Patterns — Merchant & Temporal", fontsize=15, fontweight="bold")
-    fig.tight_layout()
-    _save(fig, "fraud_patterns.png")
-
-
-# ------------------------------------------------------------------
-# 7. Amount boxplot by class
-# ------------------------------------------------------------------
-def plot_amount_boxplot(df: pd.DataFrame) -> None:
-    """Side-by-side boxplots of transaction amounts by class."""
-    fig, ax = plt.subplots(figsize=(8, 5))
-    df_plot = df[["amount", LABEL_COL]].copy()
-    df_plot[LABEL_COL] = df_plot[LABEL_COL].map({0: "Legitimate", 1: "Fraud"})
-    sns.boxplot(data=df_plot, x=LABEL_COL, y="amount", palette=["#2ecc71", "#e74c3c"], ax=ax)
-    ax.set_title("Transaction Amount by Class", fontsize=15, fontweight="bold")
-    ax.set_ylabel("Amount")
-    ax.set_xlabel("")
-    fig.tight_layout()
-    _save(fig, "amount_boxplot.png")
-
-
-# ------------------------------------------------------------------
-# Public entry point
-# ------------------------------------------------------------------
-def run_eda(df: pd.DataFrame) -> None:
-    """Run the complete EDA pipeline and save all plots."""
-    print("\n" + "=" * 70)
-    print("   EXPLORATORY DATA ANALYSIS")
-    print("=" * 70)
-    print(f"  Output directory: {EDA_DIR}\n")
-
-    print_summary_statistics(df)
+    print("\n[INFO] Generating EDA visualizations...")
     plot_class_distribution(df)
-    plot_amount_distributions(df)
-    plot_categorical_fraud_rates(df)
+    plot_fraud_by_category(df)
+    plot_amount_distribution(df)
+    plot_fraud_over_time(df)
+    plot_fraud_by_demographics(df)
+    plot_merchant_fraud(df)
     plot_correlation_heatmap(df)
-    plot_fraud_patterns(df)
-    plot_amount_boxplot(df)
 
-    print(f"\n{'='*60}")
-    print(f"  EDA COMPLETE — {len(os.listdir(EDA_DIR))} plots saved to {EDA_DIR}")
-    print(f"{'='*60}")
+    print(f"\n[INFO] All EDA plots saved to {RESULTS_DIR}")
+    print("[INFO] EDA complete!")
 
 
 if __name__ == "__main__":
-    from preprocessing import load_data
-    df = load_data()
-    run_eda(df)
+    run_eda()

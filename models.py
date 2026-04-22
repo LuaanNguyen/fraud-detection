@@ -4,7 +4,7 @@ models.py
 Baseline supervised ML models for fraud detection.
 Logistic Regression, SVM, Random Forest, XGBoost.
 Evaluated using Precision, Recall, F1-Score, and PR-AUC.
-Includes hyperparameter tuning via GridSearchCV.
+Includes hyperparameter tuning via RandomizedSearchCV.
 """
 
 import os
@@ -19,27 +19,170 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 from xgboost import XGBClassifier
-from sklearn.model_selection import GridSearchCV
+from sklearn.model_selection import RandomizedSearchCV
 
 from sklearn.metrics import (
+    precision_score, recall_score, f1_score,
+    average_precision_score, classification_report,
     precision_recall_curve, ConfusionMatrixDisplay,
-    confusion_matrix, make_scorer, average_precision_score
+    confusion_matrix
 )
 
 from preprocessing import run_preprocessing
-from eval_utils import evaluate_model
 
 warnings.filterwarnings("ignore")
 
-# ---------------------------------------------------------------
-# Output directory for plots
-# ---------------------------------------------------------------
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
 os.makedirs(RESULTS_DIR, exist_ok=True)
+RANDOM_STATE = 42
 
 
 # ---------------------------------------------------------------
-# 1. Plot PR curves for all models
+# 1. Train & Evaluate a single model
+# ---------------------------------------------------------------
+def evaluate_model(name, model, X_train, X_test, y_train, y_test):
+    """Train model and return evaluation metrics."""
+    print(f"\n{'='*60}")
+    print(f"  {name}")
+    print(f"{'='*60}")
+
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
+
+    if hasattr(model, "predict_proba"):
+        y_scores = model.predict_proba(X_test)[:, 1]
+    elif hasattr(model, "decision_function"):
+        y_scores = model.decision_function(X_test)
+    else:
+        y_scores = y_pred
+
+    precision = precision_score(y_test, y_pred, zero_division=0)
+    recall    = recall_score(y_test, y_pred, zero_division=0)
+    f1        = f1_score(y_test, y_pred, zero_division=0)
+    pr_auc    = average_precision_score(y_test, y_scores)
+
+    print(f"  Precision : {precision:.4f}")
+    print(f"  Recall    : {recall:.4f}")
+    print(f"  F1-Score  : {f1:.4f}")
+    print(f"  PR-AUC    : {pr_auc:.4f}")
+    print(f"\n{classification_report(y_test, y_pred, target_names=['Legit','Fraud'])}")
+
+    return {
+        "Model"    : name,
+        "Precision": round(precision, 4),
+        "Recall"   : round(recall, 4),
+        "F1-Score" : round(f1, 4),
+        "PR-AUC"   : round(pr_auc, 4),
+        "y_scores" : y_scores,
+    }
+
+
+# ---------------------------------------------------------------
+# 2. Hyperparameter Tuning
+# ---------------------------------------------------------------
+def tune_random_forest(X_train, y_train):
+    """Tune Random Forest using RandomizedSearchCV."""
+    print("\n[INFO] Tuning Random Forest...")
+
+    param_dist = {
+        "n_estimators"      : [100, 200, 300],
+        "max_depth"         : [None, 10, 20, 30],
+        "min_samples_split" : [2, 5, 10],
+        "min_samples_leaf"  : [1, 2, 4],
+        "max_features"      : ["sqrt", "log2"],
+    }
+
+    rf = RandomForestClassifier(
+        class_weight="balanced",
+        random_state=RANDOM_STATE,
+        n_jobs=-1
+    )
+
+    search = RandomizedSearchCV(
+        rf, param_dist,
+        n_iter=10,
+        scoring="average_precision",
+        cv=3,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbose=1
+    )
+
+    search.fit(X_train, y_train)
+    print(f"  Best RF params : {search.best_params_}")
+    print(f"  Best RF PR-AUC : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+def tune_xgboost(X_train, y_train):
+    """Tune XGBoost using RandomizedSearchCV."""
+    print("\n[INFO] Tuning XGBoost...")
+
+    param_dist = {
+        "n_estimators"  : [100, 200, 300],
+        "max_depth"     : [3, 5, 7, 9],
+        "learning_rate" : [0.01, 0.05, 0.1, 0.2],
+        "subsample"     : [0.6, 0.8, 1.0],
+        "colsample_bytree": [0.6, 0.8, 1.0],
+        "scale_pos_weight": [81],
+    }
+
+    xgb = XGBClassifier(
+        random_state=RANDOM_STATE,
+        eval_metric="aucpr",
+        verbosity=0
+    )
+
+    search = RandomizedSearchCV(
+        xgb, param_dist,
+        n_iter=10,
+        scoring="average_precision",
+        cv=3,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbose=1
+    )
+
+    search.fit(X_train, y_train)
+    print(f"  Best XGB params : {search.best_params_}")
+    print(f"  Best XGB PR-AUC : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+def tune_svm(X_train, y_train):
+    """Tune SVM using RandomizedSearchCV."""
+    print("\n[INFO] Tuning SVM...")
+
+    param_dist = {
+        "C"     : [0.1, 1, 10],
+        "kernel": ["rbf", "linear"],
+        "gamma" : ["scale", "auto"],
+    }
+
+    svm = SVC(
+        class_weight="balanced",
+        probability=True,
+        random_state=RANDOM_STATE,
+    )
+
+    search = RandomizedSearchCV(
+        svm, param_dist,
+        n_iter=6,
+        scoring="f1",
+        cv=3,
+        random_state=RANDOM_STATE,
+        n_jobs=-1,
+        verbose=1,
+    )
+
+    search.fit(X_train, y_train)
+    print(f"  Best SVM params : {search.best_params_}")
+    print(f"  Best SVM F1     : {search.best_score_:.4f}")
+    return search.best_estimator_
+
+
+# ---------------------------------------------------------------
+# 3. Plot PR curves
 # ---------------------------------------------------------------
 def plot_pr_curves(results, y_test):
     """Plot Precision-Recall curves for all models."""
@@ -70,7 +213,7 @@ def plot_pr_curves(results, y_test):
 
 
 # ---------------------------------------------------------------
-# 3. Plot comparison bar chart
+# 4. Plot comparison bar chart
 # ---------------------------------------------------------------
 def plot_comparison(summary_df):
     """Bar chart comparing all models across metrics."""
@@ -100,12 +243,12 @@ def plot_comparison(summary_df):
 
 
 # ---------------------------------------------------------------
-# 4. Plot confusion matrices
+# 5. Plot confusion matrices
 # ---------------------------------------------------------------
 def plot_confusion_matrices(results, y_test):
     """Plot confusion matrix for each model."""
     n = len(results)
-    fig, axes = plt.subplots(1, n, figsize=(5 * n, 5))
+    fig, axes = plt.subplots(1, n, figsize=(6 * n, 5))
     if n == 1:
         axes = [axes]
 
@@ -129,101 +272,45 @@ def plot_confusion_matrices(results, y_test):
 
 
 # ---------------------------------------------------------------
-# 5. Hyperparameter tuning
-# ---------------------------------------------------------------
-PARAM_GRIDS = {
-    "Logistic Regression": {
-        "C": [0.01, 0.1, 1, 10],
-        "penalty": ["l2"],
-    },
-    "SVM": {
-        "C": [0.1, 1, 10],
-        "kernel": ["rbf", "linear"],
-        "gamma": ["scale", "auto"],
-    },
-    "Random Forest": {
-        "n_estimators": [100, 200],
-        "max_depth": [None, 10, 20],
-        "min_samples_split": [2, 5],
-    },
-    "XGBoost": {
-        "n_estimators": [100, 200],
-        "max_depth": [3, 6, 10],
-        "learning_rate": [0.01, 0.1, 0.3],
-    },
-}
-
-
-def tune_model(name, model, X_train, y_train):
-    """Run GridSearchCV and return the best estimator."""
-    param_grid = PARAM_GRIDS.get(name, {})
-    if not param_grid:
-        return model
-
-    print(f"\n  [Tuning] {name} — grid search over {param_grid}")
-    scorer = make_scorer(average_precision_score, needs_proba=True)
-
-    # SVM with probability=False can't use needs_proba scorer;
-    # fall back to f1 scoring for SVM
-    if name == "SVM":
-        scorer = "f1"
-
-    grid = GridSearchCV(
-        model, param_grid, scoring=scorer,
-        cv=3, n_jobs=-1, verbose=0,
-    )
-    grid.fit(X_train, y_train)
-    print(f"  [Tuning] {name} — best params: {grid.best_params_}  score: {grid.best_score_:.4f}")
-    return grid.best_estimator_
-
-
-# ---------------------------------------------------------------
 # 6. Run all baseline models
 # ---------------------------------------------------------------
-def run_baseline_models(tune: bool = True):
-    """Full pipeline: preprocess → (optionally tune) → train → evaluate → plot."""
+def run_baseline_models():
+    """Full pipeline: preprocess → tune → train → evaluate → plot."""
 
     print("\nLoading preprocessed data...")
-    prep = run_preprocessing(balance_strategy="smote_enn")
+    prep = run_preprocessing(balance_strategy="oversample")
 
     X_train = prep["X_train"]
     X_test  = prep["X_test"]
     y_train = prep["y_train"]
     y_test  = prep["y_test"]
 
-    # Define models (all four per proposal)
+    print(f"\n{'='*60}")
+    print("  HYPERPARAMETER TUNING")
+    print(f"{'='*60}")
+
+    # Tune SVM, RF and XGBoost
+    best_svm = tune_svm(X_train, y_train)
+    best_rf  = tune_random_forest(X_train, y_train)
+    best_xgb = tune_xgboost(X_train, y_train)
+
+    # Define models — LR with defaults, SVM/RF/XGBoost tuned
     models = [
         ("Logistic Regression", LogisticRegression(
-            max_iter=1000, class_weight="balanced", random_state=42
+            max_iter=1000, class_weight="balanced", random_state=RANDOM_STATE
         )),
-        ("SVM", SVC(
-            class_weight="balanced", probability=True, random_state=42
-        )),
-        ("Random Forest", RandomForestClassifier(
-            n_estimators=100, class_weight="balanced",
-            random_state=42, n_jobs=-1
-        )),
-        ("XGBoost", XGBClassifier(
-            n_estimators=100, scale_pos_weight=81,
-            random_state=42, eval_metric="aucpr",
-            verbosity=0
-        )),
+        ("SVM (Tuned)", best_svm),
+        ("Random Forest (Tuned)", best_rf),
+        ("XGBoost (Tuned)", best_xgb),
     ]
 
-    if tune:
-        print(f"\n{'='*60}")
-        print("  HYPERPARAMETER TUNING")
-        print(f"{'='*60}")
-        models = [(name, tune_model(name, m, X_train, y_train))
-                  for name, m in models]
-
-    # Train and evaluate each model
+    # Train and evaluate
     results = []
     for name, model in models:
         res = evaluate_model(name, model, X_train, X_test, y_train, y_test)
         results.append(res)
 
-    # Summary table
+    # Summary
     summary_df = pd.DataFrame([
         {k: v for k, v in r.items() if k != "y_scores"}
         for r in results
@@ -238,7 +325,6 @@ def run_baseline_models(tune: bool = True):
     summary_df.to_csv(csv_path, index=False)
     print(f"\n  [Saved] Results CSV → {csv_path}")
 
-    # Plots
     plot_pr_curves(results, y_test)
     plot_comparison(summary_df)
     plot_confusion_matrices(results, y_test)
@@ -246,8 +332,5 @@ def run_baseline_models(tune: bool = True):
     return summary_df
 
 
-# ---------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------
 if __name__ == "__main__":
     run_baseline_models()

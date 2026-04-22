@@ -32,5 +32,6 @@ Thumbs.db
 
 # Generated results (large CSVs regenerated on demand)
 results/graph_features.csv
+EVALUATIONS/graph_features.csv
 
 data/

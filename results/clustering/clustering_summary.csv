@@ -1,0 +1,2 @@
+kmeans_silhouette,kmeans_clusters,dbscan_clusters,dbscan_noise_fraud_rate,purity_score
+0.6315,5,4,65.2174,0.9916
