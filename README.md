@@ -28,7 +28,6 @@ This project investigates whether graph-based structural features and Graph Neur
 ## Repository Structure
 
 fraud-detection/
-├── CODE/               ← All Python source files
 ├── DATA/               ← Dataset (auto-downloaded via kagglehub)
 ├── EVALUATIONS/        ← All results, plots, and CSVs
 │   ├── eda/            ← Exploratory Data Analysis plots
