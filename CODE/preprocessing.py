@@ -21,7 +21,8 @@ warnings.filterwarnings("ignore")
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(PROJECT_ROOT, "DATA")
 RAW_FILE = os.path.join(DATA_DIR, "bs140513_032310.csv")
 
 LABEL_COL = "fraud"

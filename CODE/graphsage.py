@@ -30,7 +30,8 @@ from preprocessing import load_data
 
 warnings.filterwarnings("ignore")
 
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(PROJECT_ROOT, "EVALUATIONS")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 RANDOM_STATE = 42
 torch.manual_seed(RANDOM_STATE)

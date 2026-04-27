@@ -1,11 +1,16 @@
 # Data files
-data/*.csv
-data/*.zip
+DATA/*.csv
+DATA/*.zip
+DATA/
+
+# Generated results (large CSVs regenerated on demand)
+EVALUATIONS/graph_features.csv
 
 # Output
 output/
 
 # Python
+CODE/__pycache__/
 __pycache__/
 *.pyc
 *.pyo
@@ -29,9 +34,3 @@ Thumbs.db
 
 # Jupyter
 .ipynb_checkpoints/
-
-# Generated results (large CSVs regenerated on demand)
-results/graph_features.csv
-EVALUATIONS/graph_features.csv
-
-data/

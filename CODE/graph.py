@@ -20,7 +20,8 @@ NEO4J_URI      = os.environ.get("NEO4J_URI", "bolt://localhost:7687")
 NEO4J_USER     = os.environ.get("NEO4J_USER", "neo4j")
 NEO4J_PASSWORD = os.environ.get("NEO4J_PASSWORD", "password")
 
-RESULTS_DIR = os.path.join(os.path.dirname(__file__), "results")
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+RESULTS_DIR = os.path.join(PROJECT_ROOT, "EVALUATIONS")
 os.makedirs(RESULTS_DIR, exist_ok=True)
 
 
