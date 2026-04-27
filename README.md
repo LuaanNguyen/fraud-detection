@@ -29,26 +29,30 @@ This project investigates whether graph-based structural features and Graph Neur
 
 ```
 fraud-detection/
-├── main.py                 ← Runs full 8-step pipeline end to end
-├── preprocessing.py        ← Data loading, cleaning, SMOTE-ENN, time-based split
-├── eda.py                  ← 7 EDA visualizations (class dist, fraud patterns, etc.)
-├── models.py               ← E1: Baseline ML (LR, SVM, RF, XGBoost) + tuning
-├── graph.py                ← E2: Neo4j graph construction + feature extraction
-├── hybrid_models.py        ← E2: Graph-enhanced ML models
-├── graphsage.py            ← E4: Standalone GraphSAGE node classifier
-├── embedding_models.py     ← E3: GraphSAGE embeddings → RF + MLP
-├── clustering.py           ← E5: K-Means + DBSCAN fraud ring detection
-├── requirements.txt        ← Python dependencies
-├── dashboard/              ← React dashboard for results visualization
-│   ├── src/App.js          ← Main dashboard component
-│   └── public/images/      ← All result plots served to dashboard
-├── data/                   ← Dataset (auto-downloaded via kagglehub)
-├── results/                ← Generated outputs from pipeline runs
-├── EVALUATIONS/            ← All results, plots, and CSVs
-│   ├── eda/                ← EDA plots
-│   └── clustering/         ← Clustering plots
-├── ARCHITECTURE.md         ← Data flow, module details, design decisions
-└── README.md
+├── CODE/                       ← All source code
+│   ├── main.py                 ← Runs full 8-step pipeline end to end
+│   ├── preprocessing.py        ← Data loading, cleaning, SMOTE-ENN, time-based split
+│   ├── eda.py                  ← 7 EDA visualizations (class dist, fraud patterns, etc.)
+│   ├── models.py               ← E1: Baseline ML (LR, SVM, RF, XGBoost) + tuning
+│   ├── graph.py                ← E2: Neo4j graph construction + feature extraction
+│   ├── hybrid_models.py        ← E2: Graph-enhanced ML models
+│   ├── graphsage.py            ← E4: Standalone GraphSAGE node classifier
+│   ├── embedding_models.py     ← E3: GraphSAGE embeddings → RF + MLP
+│   ├── clustering.py           ← E5: K-Means + DBSCAN fraud ring detection
+│   ├── requirements.txt        ← Python dependencies
+│   └── dashboard/              ← React dashboard for results visualization
+│       ├── src/App.js          ← Main dashboard component
+│       └── public/images/      ← All result plots served to dashboard
+├── DATA/                       ← Dataset (auto-downloaded via kagglehub, gitignored)
+│   └── bs140513_032310.csv
+├── EVALUATIONS/                ← All generated results, plots, and CSVs
+│   ├── eda/                    ← EDA plots
+│   ├── clustering/             ← Clustering plots
+│   ├── *.csv                   ← Per-experiment metrics
+│   └── *.png                   ← Comparison charts and PR curves
+├── ARCHITECTURE.md             ← Data flow, module details, design decisions
+├── README.md
+└── .gitignore
 ```
 
 ---
@@ -130,11 +134,13 @@ fraud-detection/
 - Neo4j (optional — graph features fall back to pandas/networkx if unavailable)
 - Node.js 16+ (only for the React dashboard)
 
+All commands below should be run from the **repository root** (`fraud-detection/`).
+
 ### 1. Install Python dependencies
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -r CODE/requirements.txt
 ```
 
 ### 2. Configure Neo4j (optional)
@@ -151,25 +157,27 @@ If Neo4j is not available, the graph module will fall back to networkx for betwe
 
 ### 3. Run the full pipeline
 ```bash
-python main.py
+python CODE/main.py
 ```
 
-This executes all 8 steps in sequence. You can also run individual modules:
+This executes all 8 steps in sequence. The dataset auto-downloads to `DATA/`, and all outputs are saved to `EVALUATIONS/`.
+
+You can also run individual modules:
 
 ```bash
-python preprocessing.py        # Step 1 — Data prep + SMOTE-ENN
-python eda.py                  # Step 2 — EDA visualizations
-python models.py               # Step 3 — E1: Baseline models (LR, SVM, RF, XGBoost)
-python graph.py                # Step 4 — E2: Graph construction + features
-python hybrid_models.py        # Step 5 — E2: Hybrid models
-python graphsage.py            # Step 6 — E4: Standalone GraphSAGE
-python embedding_models.py     # Step 7 — E3: Embedding models (RF + MLP)
-python clustering.py           # Step 8 — E5: Clustering analysis
+python CODE/preprocessing.py        # Step 1 — Data prep + SMOTE-ENN
+python CODE/eda.py                  # Step 2 — EDA visualizations
+python CODE/models.py               # Step 3 — E1: Baseline models (LR, SVM, RF, XGBoost)
+python CODE/graph.py                # Step 4 — E2: Graph construction + features
+python CODE/hybrid_models.py        # Step 5 — E2: Hybrid models
+python CODE/graphsage.py            # Step 6 — E4: Standalone GraphSAGE
+python CODE/embedding_models.py     # Step 7 — E3: Embedding models (RF + MLP)
+python CODE/clustering.py           # Step 8 — E5: Clustering analysis
 ```
 
 ### 4. Run the React Dashboard
 ```bash
-cd dashboard
+cd CODE/dashboard
 npm install
 npm start
 ```

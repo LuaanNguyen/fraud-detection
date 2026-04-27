@@ -2,24 +2,41 @@
 
 ## Pipeline Overview
 
-The fraud detection pipeline runs 8 sequential steps, orchestrated by `main.py`:
+The fraud detection pipeline runs 8 sequential steps, orchestrated by `CODE/main.py`:
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         main.py (orchestrator)                      │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  Step 1: preprocessing.py ──→ Clean, encode, SMOTE-ENN, split      │
-│  Step 2: eda.py ─────────────→ 7 EDA visualizations                │
-│  Step 3: models.py ─────────→ E1: Baseline ML (LR, SVM, RF, XGB)  │
-│  Step 4: graph.py ──────────→ E2: Neo4j graph + feature extraction │
-│  Step 5: hybrid_models.py ──→ E2: Graph-enhanced ML models         │
-│  Step 6: graphsage.py ─────→ E4: Standalone GraphSAGE classifier   │
-│  Step 7: embedding_models.py→ E3: GraphSAGE embeddings → RF + MLP  │
-│  Step 8: clustering.py ────→ E5: K-Means + DBSCAN fraud rings      │
-│                                                                     │
-└─────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         CODE/main.py (orchestrator)                     │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  Step 1: CODE/preprocessing.py ──→ Clean, encode, SMOTE-ENN, split     │
+│  Step 2: CODE/eda.py ─────────────→ 7 EDA visualizations               │
+│  Step 3: CODE/models.py ─────────→ E1: Baseline ML (LR, SVM, RF, XGB) │
+│  Step 4: CODE/graph.py ──────────→ E2: Neo4j graph + feature extract  │
+│  Step 5: CODE/hybrid_models.py ──→ E2: Graph-enhanced ML models        │
+│  Step 6: CODE/graphsage.py ─────→ E4: Standalone GraphSAGE classifier  │
+│  Step 7: CODE/embedding_models.py→ E3: GraphSAGE embeddings → RF + MLP │
+│  Step 8: CODE/clustering.py ────→ E5: K-Means + DBSCAN fraud rings     │
+│                                                                         │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
+
+## Project Layout
+
+```
+fraud-detection/
+├── CODE/         ← All source code (Python modules + React dashboard)
+├── DATA/         ← Raw input dataset (auto-downloaded, gitignored)
+└── EVALUATIONS/  ← All generated outputs (plots, CSVs, metrics)
+```
+
+Every Python module computes a `PROJECT_ROOT` constant at import time:
+
+```python
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+```
+
+This resolves to the repository root regardless of which working directory you run the scripts from. `DATA_DIR` and `RESULTS_DIR` are derived from `PROJECT_ROOT`, so the code always reads from `<repo>/DATA/` and writes to `<repo>/EVALUATIONS/`.
 
 ## Data Flow
 
@@ -27,8 +44,11 @@ The fraud detection pipeline runs 8 sequential steps, orchestrated by `main.py`:
 Kaggle (BankSim)
     │
     ▼
-preprocessing.py
-    ├─ download_dataset()        ← kagglehub auto-download
+DATA/bs140513_032310.csv
+    │
+    ▼
+CODE/preprocessing.py
+    ├─ download_dataset()        ← kagglehub auto-download → DATA/
     ├─ load_data()               ← clean, drop nulls, type coercion
     ├─ encode_and_scale()        ← LabelEncoder + StandardScaler
     ├─ balance_data()            ← SMOTE-ENN (default) / oversample / undersample
@@ -40,30 +60,30 @@ preprocessing.py
     │  y_train, y_test │
     └────────┬────────┘
              │
-    ┌────────┴────────────────────────────────────┐
-    │                    │                         │
-    ▼                    ▼                         ▼
- models.py          graph.py              graphsage.py
- (E1 Baseline)      (Graph Features)      (E4 Standalone GNN)
-    │                    │                         │
-    │                    ▼                         ▼
-    │             hybrid_models.py         embedding_models.py
-    │             (E2 Graph+Tabular)       (E3 Embeddings→ML)
-    │                    │                         │
-    └────────┬───────────┘                         │
-             │                                     │
-             ▼                                     │
-      clustering.py  ◄─────────────────────────────┘
+    ┌────────┴────────────────────────────────────────┐
+    │                    │                             │
+    ▼                    ▼                             ▼
+ CODE/models.py     CODE/graph.py            CODE/graphsage.py
+ (E1 Baseline)      (Graph Features)         (E4 Standalone GNN)
+    │                    │                             │
+    │                    ▼                             ▼
+    │            CODE/hybrid_models.py        CODE/embedding_models.py
+    │            (E2 Graph+Tabular)           (E3 Embeddings→ML)
+    │                    │                             │
+    └────────┬───────────┘                             │
+             │                                         │
+             ▼                                         │
+      CODE/clustering.py  ◄────────────────────────────┘
       (E5 Unsupervised)
              │
              ▼
-      results/ + EVALUATIONS/
+      EVALUATIONS/
       (CSVs, PNGs, comparison tables)
 ```
 
 ## Module Responsibilities
 
-### `preprocessing.py`
+### `CODE/preprocessing.py`
 
 Handles all data preparation from raw CSV to model-ready features.
 
@@ -79,9 +99,9 @@ Handles all data preparation from raw CSV to model-ready features.
 | `time_based_split(X, y, df)` | Splits by the `step` column chronologically (no future leakage) |
 | `run_preprocessing(balance_strategy)` | Full pipeline: load → encode → balance → split → return dict |
 
-### `eda.py`
+### `CODE/eda.py`
 
-Generates 7 visualization plots saved to `results/eda/` and `EVALUATIONS/eda/`.
+Generates 7 visualization plots saved to `EVALUATIONS/eda/`.
 
 | Function | Plot |
 |---|---|
@@ -93,7 +113,7 @@ Generates 7 visualization plots saved to `results/eda/` and `EVALUATIONS/eda/`.
 | `plot_merchant_fraud(df)` | Top merchants by fraud rate |
 | `plot_correlation_heatmap(df)` | Feature correlation matrix |
 
-### `models.py`
+### `CODE/models.py`
 
 Trains and evaluates 4 baseline ML models with hyperparameter tuning.
 
@@ -110,7 +130,7 @@ Trains and evaluates 4 baseline ML models with hyperparameter tuning.
 
 **Models:** Logistic Regression, SVM (balanced, probability=True), Random Forest, XGBoost.
 
-### `graph.py`
+### `CODE/graph.py`
 
 Manages Neo4j graph construction and feature extraction.
 
@@ -126,7 +146,7 @@ Manages Neo4j graph construction and feature extraction.
 | `extract_merchant_fraud_rate(df, reference_df)` | Per-merchant fraud rate — **leak-safe**: uses `reference_df` (training data) to compute rates, fills unseen merchants with 0 |
 | `extract_graph_features(df)` | Runs all feature extractors, saves to CSV |
 
-### `hybrid_models.py`
+### `CODE/hybrid_models.py`
 
 Combines graph features with tabular features, retrains models, and compares against baselines.
 
@@ -136,7 +156,7 @@ Combines graph features with tabular features, retrains models, and compares aga
 | `run_hybrid_models()` | Full E2 pipeline: preprocess → add graph features → train LR/RF/XGB → evaluate → compare vs baseline |
 | `plot_pr_comparison(baseline, hybrid, y_test)` | Overlaid PR curves (baseline vs hybrid) |
 
-### `graphsage.py`
+### `CODE/graphsage.py`
 
 Standalone GraphSAGE node classifier (E4).
 
@@ -149,7 +169,7 @@ Standalone GraphSAGE node classifier (E4).
 | `plot_final_comparison(graphsage_result)` | Compares GraphSAGE metrics against all previous experiments |
 | `run_graphsage()` | Full E4 pipeline |
 
-### `embedding_models.py`
+### `CODE/embedding_models.py`
 
 Uses trained GraphSAGE to extract node embeddings, then trains traditional classifiers on them (E3).
 
@@ -161,7 +181,7 @@ Uses trained GraphSAGE to extract node embeddings, then trains traditional class
 | `map_embeddings_to_transactions(...)` | Maps node embeddings back to transaction-level features |
 | `run_embedding_models()` | Full E3 pipeline: embed → train RF + MLP → evaluate |
 
-### `clustering.py`
+### `CODE/clustering.py`
 
 Unsupervised fraud ring detection (E5).
 
@@ -202,8 +222,10 @@ Under severe class imbalance, ROC-AUC can be misleadingly high (a model that pre
 
 ## Output Directory Structure
 
+All pipeline outputs are written to `EVALUATIONS/` at the repo root:
+
 ```
-results/
+EVALUATIONS/
 ├── baseline_results.csv             ← E1 metrics table
 ├── full_comparison.csv              ← All experiments combined
 ├── hybrid_results.csv               ← E2 metrics
@@ -228,7 +250,6 @@ results/
 ├── graphsage_pr_curve.png           ← E4 PR curve
 ├── e3_embedding_pr_curves.png       ← E3 PR curves
 └── full_comparison.png              ← All experiments bar chart
-
-EVALUATIONS/
-└── (mirrors results/ — duplicate output directory)
 ```
+
+`graph_features.csv` is regenerated on demand by `CODE/graph.py` and is not committed to git (gitignored under both `EVALUATIONS/`).

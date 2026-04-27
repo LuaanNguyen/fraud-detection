@@ -92,7 +92,7 @@ def main():
     # ---------------------------------------------------------------
     print("\n" + "=" * 70)
     print("   PIPELINE COMPLETE")
-    print("   All results saved to results/")
+    print("   All results saved to EVALUATIONS/")
     print("   GitHub: https://github.com/LuaanNguyen/fraud-detection")
     print("=" * 70)
 
