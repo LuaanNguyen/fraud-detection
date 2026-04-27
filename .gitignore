@@ -1,7 +1,5 @@
 # Data files
-DATA/*.csv
 DATA/*.zip
-DATA/
 
 # Generated results (large CSVs regenerated on demand)
 EVALUATIONS/graph_features.csv
