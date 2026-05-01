@@ -4,6 +4,8 @@
 \documentclass[conference]{IEEEtran}
 \IEEEoverridecommandlockouts
 
+\usepackage{dblfloatfix}
+\usepackage{placeins}
 \usepackage{cite}
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -144,6 +146,7 @@ GraphSAGE learns node representations by repeatedly pooling neighbor embeddings;
 \textbf{Unsupervised grouping.}
 Reviews of ML for financial fraud often discuss clustering as a way to surface suspicious groups without labels \cite{b4}. We apply K-Means and DBSCAN on graph-derived features as an exploratory E5.
 
+\FloatBarrier
 % =========================================================
 \section{System Architecture \& Algorithms}\label{sec:arch}
 
@@ -153,8 +156,9 @@ The repository is organized into three top-level folders: \texttt{CODE/} (Python
 
 The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} sketches how raw transactions flow through preprocessing and experiments E1--E5; plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
+\resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[node distance=0.45cm and 0.3cm]
 
   % Input
@@ -213,7 +217,8 @@ The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} sketch
   \draw[arrow] (emb)   -- (out);
   \draw[arrow] (clust) -- (out);
 
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{Pipeline aligned with \texttt{CODE/main.py}: preprocessing prints SMOTE-ENN and time-split diagnostics, while E1/E2 train on stratified splits after oversampling (Section~\ref{sec:arch}). Artifacts are saved under \texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
 \label{fig:pipeline}
 \end{figure}
@@ -295,32 +300,29 @@ Time steps              & 0--179 \\
 
 \textbf{Preprocessing steps (EDA vs.\ supervised runs):} EDA reloads the CSV directly for plotting. Supervised E1/E2 numbers come from random oversampling followed by a stratified split as noted in Section~\ref{sec:arch}. Chronological splits remain available in code for extensions but are not what produced Tables~\ref{tab:e1}--\ref{tab:e2}.
 
-Fig.~\ref{fig:eda_class} shows the severe class imbalance and category-level fraud patterns discovered during EDA. Fig.~\ref{fig:eda_heatmap} shows the feature correlation heatmap, where \texttt{amount} has the strongest single-feature correlation with fraud (0.49).
+Fig.~\ref{fig:eda_class} shows class imbalance and category-level fraud patterns. Fig.~\ref{fig:eda_heatmap} shows amount distributions and the feature correlation heatmap (\texttt{amount} correlates most strongly with fraud). Fig.~\ref{fig:eda_temporal} shows temporal fraud trends and merchant-level fraud concentration.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.49\columnwidth]{01_class_distribution.png}
-\hfill
-\includegraphics[width=0.49\columnwidth]{02_fraud_by_category.png}
-\caption{Left: Class distribution showing 1:81 fraud-to-legitimate imbalance. Right: Fraud rate per merchant category - \texttt{es\_leisure} (87\%) and \texttt{es\_travel} (79\%) are extreme high-risk categories.}
+\includegraphics[width=\linewidth]{01_class_distribution.png}\\[0.4em]
+\includegraphics[width=\linewidth]{02_fraud_by_category.png}
+\caption{Top: Class distribution (1:81 fraud-to-legitimate imbalance). Bottom: Fraud rate per merchant category---\texttt{es\_leisure} (87\%) and \texttt{es\_travel} (79\%) are the highest-risk categories.}
 \label{fig:eda_class}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.49\columnwidth]{03_amount_distribution.png}
-\hfill
-\includegraphics[width=0.49\columnwidth]{07_correlation_heatmap.png}
-\caption{Left: Transaction amount distributions - fraudulent transactions skew higher. Right: Feature correlation heatmap - \texttt{amount} (0.49) is the strongest predictor; \texttt{step} shows a negative trend (fraud decreases over time).}
+\includegraphics[width=\linewidth]{03_amount_distribution.png}\\[0.4em]
+\includegraphics[width=\linewidth]{07_correlation_heatmap.png}
+\caption{Top: Transaction amount distributions (fraudulent transactions skew higher). Bottom: Feature correlation heatmap---\texttt{amount} (0.49) is the strongest predictor; \texttt{step} trends negatively as simulated time progresses.}
 \label{fig:eda_heatmap}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.49\columnwidth]{04_fraud_over_time.png}
-\hfill
-\includegraphics[width=0.49\columnwidth]{06_merchant_fraud.png}
-\caption{Left: Temporal fraud rate trend - fraud decreases over the 180 time steps. Right: Merchant-level fraud rates - 11 of 49 merchants exceed 50\% fraud rate, invisible without graph analysis.}
+\includegraphics[width=\linewidth]{04_fraud_over_time.png}\\[0.4em]
+\includegraphics[width=\linewidth]{06_merchant_fraud.png}
+\caption{Top: Fraud count and fraud rate over the 180 time steps. Bottom: Merchant-level fraud---eleven of 49 merchants exceed 50\% fraud rate, which is hard to see without graph-oriented summaries.}
 \label{fig:eda_temporal}
 \end{figure}
 
@@ -465,12 +467,11 @@ The standalone GraphSAGE classifier (three \texttt{SAGEConv} layers, hidden widt
 
 Fig.~\ref{fig:e4} shows the training loss curve and PR curve for the standalone GNN.
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=0.49\columnwidth]{graphsage_loss.png}
-\hfill
-\includegraphics[width=0.49\columnwidth]{graphsage_pr_curve.png}
-\caption{E4: Left - GraphSAGE training loss over 100 epochs showing steady convergence. Right - GraphSAGE PR curve (PR-AUC = 0.7143). The curve shape reflects the high-recall / low-precision tradeoff: the model aggressively identifies fraud at the cost of false positives.}
+\includegraphics[width=\linewidth]{graphsage_loss.png}\\[0.4em]
+\includegraphics[width=\linewidth]{graphsage_pr_curve.png}
+\caption{E4: Top---GraphSAGE training loss over 100 epochs. Bottom---PR curve (PR-AUC $=$ 0.7143), illustrating high-recall / low-precision behavior.}
 \label{fig:e4}
 \end{figure}
 
@@ -513,16 +514,16 @@ Overall fraud rate      & 1.21\% \\
 
 K-Means (k=5) achieves Silhouette = 0.6315 (good structure) and Purity = 0.9916 (near-perfect cluster homogeneity). \textbf{Cluster 4: 337 transactions at 99.7\% fraud - a virtually pure fraud ring, discovered entirely without labels.} Cluster 3 (8,240 transactions, 61.4\% fraud) identifies a high-risk zone. DBSCAN independently validates: noise points have 65.22\% fraud rate - \textbf{54$\times$ higher than the overall 1.21\% baseline}. This dual finding confirms fraud is simultaneously \textit{clustered} (organized rings with shared graph signatures) and \textit{anomalous} (outliers inconsistent with legitimate behavior).
 
-\begin{figure}[htbp]
+\begin{figure}[!htbp]
 \centering
-\includegraphics[width=\columnwidth]{clustering/clustering_results.png}
+\includegraphics[width=\linewidth]{clustering/clustering_results.png}
 \caption{E5: 2$\times$2 clustering visualization. Top-left: K-Means cluster scatter (PCA-reduced, colored by cluster). Top-right: Per-cluster fraud rate bar chart - Cluster 4's 99.7\% bar stands dramatically above all others. Bottom-left: DBSCAN scatter with noise points highlighted. Bottom-right: Cluster size distribution showing Cluster 0 dominates with 439K legitimate transactions.}
 \label{fig:e5_clustering}
 \end{figure}
 
 \subsection{Full Experiment Comparison}
 
-\begin{table*}[!t]
+\begin{table*}[!bp]
 \centering
 \caption{Full Model Comparison: All Experiments}
 \label{tab:full}
@@ -546,7 +547,7 @@ GS emb.\ + MLP  & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
 \end{tabular}
 \end{table*}
 
-\begin{figure*}[!t]
+\begin{figure*}[!bp]
 \centering
 \includegraphics[width=\textwidth]{full_comparison.png}
 \caption{Full experiment comparison across all 10 models and four metrics. The lift from E1 (tabular baseline) to E2 (graph-enhanced) is visible. SVM is a strong negative outlier. GraphSAGE E4 favors recall over precision, while E3 embedding models approach E2 using learned representations.}
