@@ -104,7 +104,7 @@ Standard supervised models use one feature vector per transaction. Tree ensemble
 
 We use Neo4j when it is available to materialize a bipartite graph (customers and merchants as nodes; transactions as edges). The same feature logic can fall back to \texttt{pandas} and \texttt{networkx} if Neo4j is not running \cite{b2}. For learned representations we experiment with GraphSAGE-style models \cite{b6}.
 
-What we deliver matches the public GitHub repo:
+What we deliver matches the public repository at \url{https://github.com/LuaanNguyen/fraud-detection}:
 \begin{itemize}
     \item One driver script, \texttt{CODE/main.py}, that runs preprocessing, EDA, and experiments E1--E5 in order.
     \item Modules under \texttt{CODE/} for preprocessing, baselines, graph features, hybrids, GraphSAGE, embeddings, and clustering; outputs written to \texttt{EVALUATIONS/}.
@@ -269,7 +269,7 @@ Graph features are standardized and fed to K-Means ($k{=}5$) and DBSCAN. We repo
 % -------------------------------------------------------------
 \subsection{Reproducibility}
 \label{sec:repro}
-Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
+Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. The course presentation slides are at \url{https://docs.google.com/presentation/d/1QJT9qdFStGxqHnXBWEWXTRCaPOwXrT6CSsuSeePPO2U/edit?usp=sharing}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
 
 % =========================================================
 \section{Datasets (Descriptions, Sizes and Preprocessing Steps)}
@@ -637,7 +637,7 @@ Future work: real (non-synthetic) feeds; strict chronological evaluation; tempor
 
 % =========================================================
 \section*{Acknowledgment}
-The authors thank Prof.\ Hasan Davulcu and the CSE 573 Semantic Web Mining staff at Arizona State University for guidance. The BankSim dataset was sourced from Kaggle \cite{b1}. Clone and run instructions appear in Section~\ref{sec:repro}. Figures and metrics reproduce artifacts under \texttt{EVALUATIONS/}; related-work facts are cited and paraphrased by the authors.
+The authors thank Prof.\ Hasan Davulcu and the CSE 573 Semantic Web Mining staff at Arizona State University for guidance. The BankSim dataset was sourced from Kaggle \cite{b1}. Clone and run instructions, plus links to the GitHub repository and presentation slides, appear in Section~\ref{sec:repro}. Figures and metrics reproduce artifacts under \texttt{EVALUATIONS/}; related-work facts are cited and paraphrased by the authors.
 
 % =========================================================
 \balance
