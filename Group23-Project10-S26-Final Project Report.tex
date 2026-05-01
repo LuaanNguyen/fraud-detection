@@ -1,0 +1,668 @@
+% CSE 573 — submit PDF named: Group23-Project10-S26-Final Project Report.pdf
+% Source: compile from repository root so \graphicspath{EVALUATIONS/...} resolves:
+%   pdflatex "Group23-Project10-S26-Final Project Report.tex" (run twice)
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+
+\usepackage{cite}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{array}
+\usepackage{tikz}
+\usepackage{url}
+\usepackage{microtype}
+% IEEE/compatibility: hidelinks avoids colored boxes; omit hyperref if your venue forbids it.
+\usepackage[hidelinks]{hyperref}
+\usepackage{balance}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
+
+% Compile from repository root so figures resolve (EVALUATIONS/ at repo top level).
+\graphicspath{
+  {EVALUATIONS/}
+  {EVALUATIONS/eda/}
+  {EVALUATIONS/clustering/}
+}
+
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+
+% TikZ styles for pipeline diagram
+\tikzset{
+  block/.style  = {rectangle, draw, fill=blue!10, text width=3.8cm,
+                   align=center, rounded corners, minimum height=0.7cm, font=\small},
+  io/.style     = {trapezium, trapezium left angle=70, trapezium right angle=110,
+                   draw, fill=orange!20, text width=2.6cm, align=center,
+                   minimum height=0.65cm, font=\small},
+  arrow/.style  = {thick, -Stealth},
+  exp/.style    = {rectangle, draw, fill=green!15, text width=3.0cm,
+                   align=center, rounded corners, minimum height=0.65cm, font=\scriptsize},
+  out/.style    = {rectangle, draw, fill=gray!15, text width=2.4cm,
+                   align=center, rounded corners, minimum height=0.65cm, font=\scriptsize},
+}
+
+\begin{document}
+
+\title{Fraud Detection with Graph Databases and\\Graph Neural Networks}
+
+\author{
+\IEEEauthorblockN{Luan Nguyen}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+ltnguy58@asu.edu}
+\and
+\IEEEauthorblockN{Dhanush Mugajji Shambulingappa}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+dmugajji@asu.edu}
+\and
+\IEEEauthorblockN{Chandra Shekhar Pavuluri}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+cpavulur@asu.edu}
+\and
+\IEEEauthorblockN{Adrian Zhang}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+awzhang1@asu.edu}
+\and
+\IEEEauthorblockN{Shashikant Nanda}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+snanda5@asu.edu}
+\and
+\IEEEauthorblockN{Chitwandeep Kaur Palne}
+\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+Arizona State University, Tempe, AZ\\
+cpalne@asu.edu}
+}
+
+\maketitle
+
+% =========================================================
+\begin{abstract}
+We built a fraud-detection project on the BankSim synthetic banking dataset (594,643 transactions; fraud about 1.2\%; imbalance $\approx$1:81). Tabular models ignore links between customers and merchants, so we asked whether graph-side signals and a Graph Neural Network help. Our implementation runs eight sequential steps from \texttt{CODE/main.py}: baseline models (E1), hybrid models that add graph-derived features (E2), GraphSAGE embeddings plus downstream classifiers (E3), an end-to-end GraphSAGE classifier (E4), and clustering for fraud rings (E5). Graph features lift every supervised model we compared; Random Forest with graph features reaches PR-AUC $=$ 1.0000. Unsupervised K-Means surfaces a small cluster at about 99.7\% fraud without using labels. We also ship a React~19 dashboard under \texttt{CODE/dashboard/} to browse plots and tables saved under \texttt{EVALUATIONS/}.
+\end{abstract}
+
+\begin{IEEEkeywords}
+fraud detection, graph neural networks, GraphSAGE, Neo4j, class imbalance, SMOTE-ENN, random oversampling, graph features, unsupervised clustering
+\end{IEEEkeywords}
+
+% =========================================================
+\section{Introduction}
+
+Industry surveys report that fraud losses stay high even as banks spend more on prevention \cite{b3}. For our project, three issues stood out: fraud is rare (under about 2\% here), attackers change behavior over time, and fraud often shows up through \textit{relationships} between customers and merchants—not only through single-row attributes.
+
+Standard supervised models use one feature vector per transaction. Tree ensembles work well on tables, but they do not automatically encode network structure. Patterns such as many accounts tying back to the same risky merchant are easier to see once we view transactions as a graph.
+
+We use Neo4j when it is available to materialize a bipartite graph (customers and merchants as nodes; transactions as edges). The same feature logic can fall back to \texttt{pandas} and \texttt{networkx} if Neo4j is not running \cite{b2}. For learned representations we experiment with GraphSAGE-style models \cite{b6}.
+
+What we deliver matches the public GitHub repo:
+\begin{itemize}
+    \item One driver script, \texttt{CODE/main.py}, that runs preprocessing, EDA, and experiments E1--E5 in order.
+    \item Modules under \texttt{CODE/} for preprocessing, baselines, graph features, hybrids, GraphSAGE, embeddings, and clustering; outputs written to \texttt{EVALUATIONS/}.
+    \item Graph utilities in \texttt{CODE/graph.py} with optional Neo4j and pandas/networkx fallbacks.
+    \item A training-set-only merchant fraud-rate join to avoid label leakage in E2.
+    \item A React~19 dashboard under \texttt{CODE/dashboard/}.
+    \item Measured gains when graph features are added (RF + graph reaches PR-AUC $=$ 1.0000 on our saved run).
+\end{itemize}
+
+% =========================================================
+\section{Problem Statement}
+
+Given a set of banking transactions $\mathcal{T} = \{t_1, \ldots, t_N\}$ where each $t_i$ is associated with customer $c$, merchant $m$, amount $a$, category $k$, time step $s$, and demographic attributes, the task is to learn $f: \mathcal{T} \rightarrow \{0,1\}$ predicting fraud ($y=1$) or legitimate ($y=0$).
+
+Key challenges:
+\begin{itemize}
+    \item \textbf{Class imbalance:} 7,200 fraud cases in 594,643 rows (about 1:81). Accuracy alone is misleading because predicting ``always legitimate'' already scores $\approx$98.8\%.
+    \item \textbf{Train/test design:} Our code \textit{computes} a chronological split on \texttt{step} inside \texttt{CODE/preprocessing.py}, but the supervised numbers reported for E1/E2 use stratified 80/20 splits after random oversampling (see Section~\ref{sec:arch}). That choice trades strict temporal holdout for simpler training with severe imbalance; a full time-based evaluation is left as future work.
+    \item \textbf{Structural signal:} Fraud rings show up as unusual connectivity in the transaction graph, not only as outliers on individual columns.
+\end{itemize}
+
+\textit{Hypothesis: Graph-derived structural features and GNN representations improve fraud detection precision and recall over tabular-only approaches.}
+
+% =========================================================
+\section{Related Works}
+
+\textbf{Traditional ML.}
+Survey work on fraud detection with classical and deep models highlights tree ensembles and boosting as strong tabular baselines, often improved by careful tuning \cite{b7}. We follow that pattern with logistic regression, SVM, random forest, and XGBoost before adding graph views.
+
+\textbf{Class imbalance.}
+Combine-and-clean resampling methods such as SMOTE-ENN oversample the minority class and then drop noisy neighbors so class boundaries are less jagged \cite{b7}. Our pipeline prints SMOTE-ENN statistics for comparison, while the reported E1/E2 experiments currently train on random oversampling plus a stratified split (Section~\ref{sec:arch}).
+
+\textbf{Graph-based fraud detection.}
+Wang et al.\ \cite{b5} use a semi-supervised graph attentive network (SemiGNN) for relational fraud, which motivates modeling transactions as a graph rather than isolated rows. Tooling such as Neo4j Graph Data Science implements standard centrality and community algorithms we optionally call when a database is reachable \cite{b2}.
+
+\textbf{Graph neural networks.}
+GraphSAGE learns node representations by repeatedly pooling neighbor embeddings; it can generalize when new nodes appear later \cite{b6}. We use PyTorch Geometric \texttt{SAGEConv} stacks for both an end-to-end classifier (E4) and an embedding encoder used before RF/MLP heads (E3).
+
+\textbf{Unsupervised grouping.}
+Reviews of ML for financial fraud often discuss clustering as a way to surface suspicious groups without labels \cite{b4}. We apply K-Means and DBSCAN on graph-derived features as an exploratory E5.
+
+% =========================================================
+\section{System Architecture \& Algorithms}\label{sec:arch}
+
+\subsection{Pipeline Overview}
+
+The repository is organized into three top-level folders: \texttt{CODE/} (Python modules and the React dashboard), \texttt{DATA/} (BankSim CSV committed for grading convenience, with optional \texttt{kagglehub} download if missing), and \texttt{EVALUATIONS/} (generated CSVs and figures consumed by this paper and the dashboard).
+
+The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} sketches how raw transactions flow through preprocessing and experiments E1--E5; plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[node distance=0.45cm and 0.3cm]
+
+  % Input
+  \node[io] (csv) {BankSim CSV\\594,643 rows};
+
+  % Step 1
+  \node[block, below=of csv] (prep)
+    {\textbf{Step 1}\\\texttt{CODE/preprocessing.py}\\Clean · Encode · Scale\\SMOTE-ENN demo + time split};
+
+  % Split output
+  \node[block, below=of prep] (split)
+    {Stratified train/test\\for E1 \& E2\\after oversampling};
+
+  % Step 2 EDA
+  \node[block, below left=0.45cm and -0.5cm of split, xshift=-1.2cm] (eda)
+    {\textbf{Step 2}\\\texttt{CODE/eda.py}\\7 EDA plots};
+
+  % Three parallel experiment tracks
+  \node[exp, below=0.9cm of split, xshift=-2.8cm] (e1)
+    {\textbf{Step 3}\\\texttt{CODE/models.py}\\E1};
+
+  \node[exp, below=0.9cm of split] (graph)
+    {\textbf{Step 4}\\\texttt{CODE/graph.py}\\Graph build};
+
+  \node[exp, below=0.9cm of split, xshift=2.8cm] (gnn)
+    {\textbf{Step 6}\\\texttt{CODE/graphsage.py}\\E4};
+
+  % Step 5 hybrid
+  \node[exp, below=0.45cm of graph] (hybrid)
+    {\textbf{Step 5}\\\texttt{CODE/hybrid\_models.py}\\E2};
+
+  % Step 7 embedding
+  \node[exp, below=0.45cm of gnn] (emb)
+    {\textbf{Step 7}\\\texttt{CODE/embedding\_models.py}\\E3};
+
+  % Step 8 clustering
+  \node[exp, below=0.45cm of e1] (clust)
+    {\textbf{Step 8}\\\texttt{CODE/clustering.py}\\E5};
+
+  % Output
+  \node[out, below=1.1cm of hybrid] (out)
+    {\texttt{EVALUATIONS/}\\plots \& CSVs\\\texttt{CODE/dashboard/}};
+
+  % Arrows
+  \draw[arrow] (csv)   -- (prep);
+  \draw[arrow] (prep)  -- (split);
+  \draw[arrow] (split) -- (eda);
+  \draw[arrow] (split) -- (e1);
+  \draw[arrow] (split) -- (graph);
+  \draw[arrow] (split) -- (gnn);
+  \draw[arrow] (graph) -- (hybrid);
+  \draw[arrow] (gnn)   -- (emb);
+  \draw[arrow] (e1)    -- (clust);
+  \draw[arrow] (e1)    -- (out);
+  \draw[arrow] (hybrid)-- (out);
+  \draw[arrow] (emb)   -- (out);
+  \draw[arrow] (clust) -- (out);
+
+\end{tikzpicture}
+\caption{Pipeline aligned with \texttt{CODE/main.py}: preprocessing prints SMOTE-ENN and time-split diagnostics, while E1/E2 train on stratified splits after oversampling (Section~\ref{sec:arch}). Artifacts are saved under \texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
+\label{fig:pipeline}
+\end{figure}
+
+\subsection{Preprocessing}
+
+\texttt{CODE/preprocessing.py} loads \texttt{DATA/bs140513\_032310.csv} (already checked into GitHub for easier grading) or downloads BankSim through \texttt{kagglehub} when the file is absent. Rows are cleaned (constant \texttt{zipcodeOri}/\texttt{zipMerchant} removed when degenerate), categoricals are label-encoded, and \texttt{amount} is standardized.
+
+The helper also prints SMOTE-ENN balancing statistics for comparison with plain oversampling and undersampling—this is what Step~1 of \texttt{CODE/main.py} exercises. Separately, it computes a chronological split on \texttt{step} and exposes those matrices as \texttt{X\_train\_time}/\texttt{X\_test\_time}; \textbf{those tensors are not used} by the supervised experiments whose metrics appear in Section~\ref{sec:eval}.
+
+For E1 and E2 as implemented in \texttt{CODE/models.py} and \texttt{CODE/hybrid\_models.py}, we balance fraud vs.\ legitimate rows with \textbf{random oversampling} to roughly 50/50 and then apply an \textbf{80/20 stratified train/test split} (\texttt{random\_state=42}). Hybrid models additionally attach degree, PageRank, betweenness, and community features via \texttt{FraudGraph} before splitting, then derive \texttt{merchant\_fraud\_rate} from training rows only.
+
+\subsection{Graph Construction and Feature Extraction}
+
+\texttt{CODE/graph.py} builds a bipartite graph $G=(V,E)$ with customers $V_C$, merchants $V_M$, and weighted transaction edges. Batch loads of up to 50{,}000 edges target Neo4j when it is running; otherwise pandas/networkx paths still expose the graph scalars we need. Five engineered signals per transaction row are:
+
+\begin{itemize}
+    \item \textbf{Degree centrality} --- counts how often a node appears.
+    \item \textbf{PageRank} --- importance-style score on the bipartite graph.
+    \item \textbf{Betweenness centrality} --- highlights bridges between regions (Neo4j GDS or \texttt{networkx} fallback).
+    \item \textbf{Community ID} --- Louvain-style grouping (again with a Python fallback).
+    \item \textbf{Merchant fraud rate} --- computed strictly from the training partition before scoring validation rows (missing merchants default to zero exposure).
+\end{itemize}
+
+\texttt{CODE/hybrid\_models.py} recomputes degree, PageRank, betweenness, and community features through \texttt{FraudGraph} before oversampling and splitting. Step~4 (\texttt{run\_graph\_pipeline()}) additionally writes consolidated graph-feature exports used elsewhere in the assignment workflow.
+
+\subsection{Baseline Models (E1)}
+
+Four classifiers are trained on tabular features: logistic regression ($\ell_2$, class-balanced), SVM with RBF kernel (balanced class weights, hyperparameters from \texttt{RandomizedSearchCV}), random forest (100--300 trees searched), and XGBoost (\texttt{scale\_pos\_weight}, tuned similarly).
+
+\subsection{GraphSAGE Models (E3, E4)}
+
+Transaction rows are converted into a PyTorch Geometric \texttt{Data} object. Each node stores a three-dimensional feature vector derived from grouped means of encoded categoricals and standardized amounts (customers aggregate age, gender, and amount; merchants aggregate category and amount with a zero placeholder in the middle slot). Edges are duplicated to be bidirectional, matching \texttt{CODE/graphsage.py}.
+
+\textbf{E4 --- end-to-end classifier.} \texttt{CODE/graphsage.py} stacks \textbf{three} \texttt{SAGEConv} layers with mean aggregation: two hidden layers use ReLU activations and dropout, and the final layer emits logits for the fraud vs.\ legitimate classes. Training follows the Adam optimizer with weighted cross-entropy to reflect imbalance.
+
+\textbf{E3 --- embeddings + downstream ML.} \texttt{CODE/embedding\_models.py} trains a shallower encoder with \textbf{two} \texttt{SAGEConv} layers (hidden width 64, embedding width 32). During encoder pre-training we temporarily attach a linear head so cross-entropy loss can shape the representation; after optimization we drop that head and concatenate customer $\oplus$ merchant embeddings (64 features per transaction) for Random Forest and MLP heads evaluated with standard sklearn metrics.
+
+Both setups reuse the GraphSAGE aggregation intuition~\cite{b6}:
+\begin{equation}
+h_v^{(k)} = \sigma\!\left(W^{(k)} \cdot \mathrm{MEAN}\!\left(\{h_v^{(k-1)}\} \cup \{h_u^{(k-1)} : u \in \mathcal{N}(v)\}\right)\right)
+\end{equation}
+
+\subsection{Unsupervised Clustering (E5)}
+
+Graph features are standardized and fed to K-Means ($k{=}5$) and DBSCAN. We report purity and silhouette for K-Means and the fraud rate among DBSCAN noise points.
+
+% -------------------------------------------------------------
+\subsection{Reproducibility}
+\label{sec:repro}
+Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
+
+% =========================================================
+\section{Datasets (Descriptions, Sizes and Preprocessing Steps)}
+
+BankSim \cite{b1} is a synthetic banking dataset from a graph-simulation of real Spanish banking data, publicly available on Kaggle. Table~\ref{tab:dataset} summarizes its statistics.
+
+\begin{table}[htbp]
+\centering
+\caption{BankSim Dataset Statistics}
+\label{tab:dataset}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Total transactions      & 594{,}643 \\
+Fraudulent              & 7{,}200 (1.21\%) \\
+Legitimate              & 587{,}443 (98.79\%) \\
+Imbalance ratio         & 1:81 \\
+Unique customers        & 4{,}061 \\
+Unique merchants        & 49 \\
+Transaction categories  & 15 \\
+Time steps              & 0--179 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Features:} \texttt{step} (time), \texttt{customer} (ID), \texttt{age} (group 0--6), \texttt{gender} (M/F/E/U), \texttt{merchant} (ID), \texttt{category} (15 types), \texttt{amount} (euros), \texttt{fraud} (label). Constant columns \texttt{zipcodeOri} and \texttt{zipMerchant} are dropped.
+
+\textbf{Preprocessing steps (EDA vs.\ supervised runs):} EDA reloads the CSV directly for plotting. Supervised E1/E2 numbers come from random oversampling followed by a stratified split as noted in Section~\ref{sec:arch}. Chronological splits remain available in code for extensions but are not what produced Tables~\ref{tab:e1}--\ref{tab:e2}.
+
+Fig.~\ref{fig:eda_class} shows the severe class imbalance and category-level fraud patterns discovered during EDA. Fig.~\ref{fig:eda_heatmap} shows the feature correlation heatmap, where \texttt{amount} has the strongest single-feature correlation with fraud (0.49).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.49\columnwidth]{01_class_distribution.png}
+\hfill
+\includegraphics[width=0.49\columnwidth]{02_fraud_by_category.png}
+\caption{Left: Class distribution showing 1:81 fraud-to-legitimate imbalance. Right: Fraud rate per merchant category - \texttt{es\_leisure} (87\%) and \texttt{es\_travel} (79\%) are extreme high-risk categories.}
+\label{fig:eda_class}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.49\columnwidth]{03_amount_distribution.png}
+\hfill
+\includegraphics[width=0.49\columnwidth]{07_correlation_heatmap.png}
+\caption{Left: Transaction amount distributions - fraudulent transactions skew higher. Right: Feature correlation heatmap - \texttt{amount} (0.49) is the strongest predictor; \texttt{step} shows a negative trend (fraud decreases over time).}
+\label{fig:eda_heatmap}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.49\columnwidth]{04_fraud_over_time.png}
+\hfill
+\includegraphics[width=0.49\columnwidth]{06_merchant_fraud.png}
+\caption{Left: Temporal fraud rate trend - fraud decreases over the 180 time steps. Right: Merchant-level fraud rates - 11 of 49 merchants exceed 50\% fraud rate, invisible without graph analysis.}
+\label{fig:eda_temporal}
+\end{figure}
+
+% =========================================================
+\section{Evaluations (Metrics, Experiments, Findings)}\label{sec:eval}
+
+\subsection{Evaluation Metrics}
+
+Accuracy is not reported due to 1:81 imbalance. Primary metrics:
+\begin{itemize}
+    \item \textbf{Precision:} $\frac{TP}{TP+FP}$ - fraction of fraud alerts that are real.
+    \item \textbf{Recall:} $\frac{TP}{TP+FN}$ - fraction of actual fraud detected.
+    \item \textbf{F1-Score:} Harmonic mean of Precision and Recall.
+    \item \textbf{PR-AUC:} Area under the Precision-Recall curve (primary metric). More informative than ROC-AUC under severe imbalance.
+    \item \textbf{Purity / Silhouette} (E5): Cluster quality metrics.
+\end{itemize}
+
+\subsection{E1 - Baseline Tabular ML Models}
+
+\begin{table}[htbp]
+\centering
+\caption{E1: Baseline Tabular ML Results}
+\label{tab:e1}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+Logistic Regression & 0.9491 & 0.8664 & 0.9059 & 0.9714 \\
+SVM                 & 0.2617 & 0.3141 & 0.2855 & 0.4904 \\
+Random Forest       & 0.9949 & 1.0000 & 0.9975 & 0.9990 \\
+XGBoost             & 0.9432 & 1.0000 & 0.9708 & 0.9953 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Random Forest and XGBoost achieve Recall $=$ 1.0000 on our stratified test partition after oversampling. SVM performs poorly (PR-AUC $=$ 0.4904): precision is only 0.2617, so most flagged positives are false alarms. Training SVM with RBF kernels on hundreds of thousands of oversampled rows is also expensive in practice. Logistic regression misses about 13\% of fraud (Recall $=$ 0.8664), which highlights limits of a linear boundary on this engineered feature space.
+
+Fig.~\ref{fig:e1_prcurves} shows the PR curves for all four baseline models. The RF and XGBoost curves hug the top-right corner while SVM's curve collapses near the diagonal. Fig.~\ref{fig:e1_confusion} shows the confusion matrices; RF has near-zero false negatives.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{pr_curves_baseline.png}
+\caption{E1: Precision-Recall curves for all baseline models. RF and XGBoost achieve near-perfect PR-AUC ($\geq$0.995). SVM (PR-AUC = 0.4904) fails entirely under the combination of large scale and severe class imbalance.}
+\label{fig:e1_prcurves}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{confusion_matrices.png}
+\caption{E1: Confusion matrices for all four baseline models. RF shows near-zero false negatives (catches all fraud). SVM produces a high number of both false positives and false negatives, confirming its failure.}
+\label{fig:e1_confusion}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{model_comparison.png}
+\caption{E1: Grouped bar chart comparing Precision, Recall, F1, and PR-AUC across all four baseline models. SVM bars are dramatically lower than all others, visually confirming its unsuitability for this task.}
+\label{fig:e1_comparison}
+\end{figure}
+
+\subsection{E2 - Graph-Enhanced Hybrid Models}
+
+\begin{table}[htbp]
+\centering
+\caption{E2: Graph-Enhanced ML Results vs.\ Baseline}
+\label{tab:e2}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+LR (Baseline)       & 0.9491 & 0.8664 & 0.9059 & 0.9714 \\
+\textbf{LR + Graph} & \textbf{0.9682} & \textbf{0.9740} & \textbf{0.9711} & \textbf{0.9959} \\
+\addlinespace
+RF (Baseline)       & 0.9949 & 1.0000 & 0.9975 & 0.9990 \\
+\textbf{RF + Graph} & \textbf{0.9976} & \textbf{1.0000} & \textbf{0.9988} & \textbf{1.0000} \\
+\addlinespace
+XGB (Baseline)      & 0.9432 & 1.0000 & 0.9708 & 0.9953 \\
+\textbf{XGB + Graph}& \textbf{0.9792} & \textbf{1.0000} & \textbf{0.9895} & \textbf{0.9993} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Every model improves with graph features, confirming the hypothesis. The most dramatic gain is in Logistic Regression: Recall jumps from 0.8664 to 0.9740 ($+$0.1076) and PR-AUC from 0.9714 to 0.9959 ($+$0.0245). The \texttt{merchant\_fraud\_rate} feature provides a linearly separable signal LR was missing. RF with graph features achieves a \textbf{perfect PR-AUC of 1.0000}, meaning no precision-recall tradeoff exists at any threshold. XGBoost gains $+$0.036 Precision.
+
+Figs.~\ref{fig:e2_compare} and \ref{fig:e2_prcurves} visually confirm that every graph-enhanced model outperforms its baseline counterpart.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{baseline_vs_hybrid.png}
+\caption{E2: Bar chart comparing baseline vs.\ graph-enhanced models across all metrics. Logistic Regression shows the largest visible improvement, particularly in Recall. RF achieves the maximum possible PR-AUC of 1.0000 with graph features.}
+\label{fig:e2_compare}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{pr_curves_comparison.png}
+\caption{E2: Overlaid PR curves - baseline (dashed) vs.\ graph-enhanced (solid) for each model. All three graph-enhanced curves sit above their baseline counterparts. RF + Graph (solid green) achieves a perfect curve at the top-right corner.}
+\label{fig:e2_prcurves}
+\end{figure}
+
+\subsection{E3 - GraphSAGE Embedding-Based Models}
+
+\begin{table}[htbp]
+\centering
+\caption{E3: GraphSAGE Embedding Model Results}
+\label{tab:e3}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+GraphSAGE + RF  & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
+GraphSAGE + MLP & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+GraphSAGE is trained as an encoder, extracting 32-dimensional node embeddings. Customer and merchant embeddings are concatenated to form a 64-feature transaction vector fed to RF and MLP. GraphSAGE + RF achieves PR-AUC = 0.9997 - nearly matching the manually engineered RF + Graph (1.0000) - without requiring any domain expertise in graph algorithm selection. This validates end-to-end representation learning as a viable substitute for manual graph feature engineering.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{e3_embedding_pr_curves.png}
+\caption{E3: PR curves for GraphSAGE embedding-based classifiers. Both GraphSAGE + RF (PR-AUC = 0.9997) and GraphSAGE + MLP (PR-AUC = 0.9987) achieve near-perfect curves, confirming that learned 32-dimensional node embeddings encode fraud-discriminative structural information.}
+\label{fig:e3_prcurves}
+\end{figure}
+
+\subsection{E4 - Standalone GraphSAGE Node Classifier}
+
+\begin{table}[htbp]
+\centering
+\caption{E4: Standalone GraphSAGE Results}
+\label{tab:e4}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+GraphSAGE & 0.4344 & 0.9298 & 0.5922 & 0.7143 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The standalone GraphSAGE classifier (three \texttt{SAGEConv} layers, hidden width 64, dropout, 100 epochs, 30{,}000-row subgraph sample) reaches Recall $=$ 0.9298 but Precision $=$ 0.4344, so many alerts are false positives (PR-AUC $=$ 0.7143). Likely contributors include the thin node feature set, the subgraph cap, and moderate training depth. Even so, high recall suggests it could serve as a recall-oriented triage stage paired with a precision-focused second model.
+
+Fig.~\ref{fig:e4} shows the training loss curve and PR curve for the standalone GNN.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.49\columnwidth]{graphsage_loss.png}
+\hfill
+\includegraphics[width=0.49\columnwidth]{graphsage_pr_curve.png}
+\caption{E4: Left - GraphSAGE training loss over 100 epochs showing steady convergence. Right - GraphSAGE PR curve (PR-AUC = 0.7143). The curve shape reflects the high-recall / low-precision tradeoff: the model aggressively identifies fraud at the cost of false positives.}
+\label{fig:e4}
+\end{figure}
+
+\subsection{E5 - Unsupervised Fraud Ring Detection}
+
+\begin{table}[htbp]
+\centering
+\caption{E5: Clustering Metrics}
+\label{tab:e5}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+K-Means silhouette      & 0.6315 \\
+K-Means purity          & 0.9916 \\
+K-Means clusters ($k$)  & 5 \\
+DBSCAN clusters         & 4 \\
+DBSCAN noise fraud rate & 65.22\% \\
+Overall fraud rate      & 1.21\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering
+\caption{K-Means Cluster Fraud Analysis}
+\label{tab:clusters}
+\begin{tabular}{@{}crrl@{}}
+\toprule
+\textbf{Cluster} & \textbf{Size} & \textbf{Fraud \%} & \textbf{Type} \\
+\midrule
+4 & 337     & 99.7 & Pure fraud ring \\
+3 & 8{,}240 & 61.4 & High risk \\
+2 & 72{,}284 & 1.7 & Low risk \\
+1 & 74{,}169 & 0.8 & Low risk \\
+0 & 439{,}613 & 0.0 & Clean \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+K-Means (k=5) achieves Silhouette = 0.6315 (good structure) and Purity = 0.9916 (near-perfect cluster homogeneity). \textbf{Cluster 4: 337 transactions at 99.7\% fraud - a virtually pure fraud ring, discovered entirely without labels.} Cluster 3 (8,240 transactions, 61.4\% fraud) identifies a high-risk zone. DBSCAN independently validates: noise points have 65.22\% fraud rate - \textbf{54$\times$ higher than the overall 1.21\% baseline}. This dual finding confirms fraud is simultaneously \textit{clustered} (organized rings with shared graph signatures) and \textit{anomalous} (outliers inconsistent with legitimate behavior).
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{clustering/clustering_results.png}
+\caption{E5: 2$\times$2 clustering visualization. Top-left: K-Means cluster scatter (PCA-reduced, colored by cluster). Top-right: Per-cluster fraud rate bar chart - Cluster 4's 99.7\% bar stands dramatically above all others. Bottom-left: DBSCAN scatter with noise points highlighted. Bottom-right: Cluster size distribution showing Cluster 0 dominates with 439K legitimate transactions.}
+\label{fig:e5_clustering}
+\end{figure}
+
+\subsection{Full Experiment Comparison}
+
+\begin{table*}[!t]
+\centering
+\caption{Full Model Comparison: All Experiments}
+\label{tab:full}
+\small
+\setlength{\tabcolsep}{8pt}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+LR (Baseline)   & 0.9491 & 0.8664 & 0.9059 & 0.9714 \\
+SVM (Baseline)  & 0.2617 & 0.3141 & 0.2855 & 0.4904 \\
+RF (Baseline)   & 0.9949 & 1.0000 & 0.9975 & 0.9990 \\
+XGB (Baseline)  & 0.9432 & 1.0000 & 0.9708 & 0.9953 \\
+LR + Graph      & 0.9682 & 0.9740 & 0.9711 & 0.9959 \\
+\textbf{RF + Graph} & \textbf{0.9976} & \textbf{1.0000} & \textbf{0.9988} & \textbf{1.0000} \\
+XGB + Graph     & 0.9792 & 1.0000 & 0.9895 & 0.9993 \\
+GraphSAGE (E4)  & 0.4344 & 0.9298 & 0.5922 & 0.7143 \\
+GS emb.\ + RF   & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
+GS emb.\ + MLP  & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=\textwidth]{full_comparison.png}
+\caption{Full experiment comparison across all 10 models and four metrics. The lift from E1 (tabular baseline) to E2 (graph-enhanced) is visible. SVM is a strong negative outlier. GraphSAGE E4 favors recall over precision, while E3 embedding models approach E2 using learned representations.}
+\label{fig:full_comparison}
+\end{figure*}
+
+% =========================================================
+\section{UI / Visualization Interface Designs}
+
+\subsection{Overview}
+
+An interactive single-page application (SPA) was built in React~19 (Create React App scaffold in \texttt{CODE/dashboard/}) and served at \texttt{http://localhost:3000}. It uses no external UI component library - all layout and styling is pure inline CSS, keeping the bundle lean. The dashboard is branded with ASU's official colors: Maroon (\texttt{\#8C1D40}) for headers and active states, Gold (\texttt{\#FFC627}) for section accents.
+
+\subsection{Navigation and Tabs}
+
+The interface has 8 tabs in a sticky header: \textbf{Overview}, \textbf{E1 Baseline}, \textbf{E2 Graph}, \textbf{E3 Embeddings}, \textbf{E4 GNN}, \textbf{E5 Clustering}, \textbf{EDA Insights}, and \textbf{Results Gallery}. Metric values are semantically color-coded: green ($\geq$0.99), amber ($\geq$0.95), yellow ($\geq$0.80), red (below 0.80).
+
+\subsection{Reusable Components}
+
+Six reusable functional React components:
+\begin{itemize}
+    \item \textbf{MetricBadge} - colored badge with threshold-aware formatting.
+    \item \textbf{StatCard} - top-bordered card with large headline metric.
+    \item \textbf{SectionTitle} - Gold left-bar with Georgia serif heading.
+    \item \textbf{ResultsTable} - Maroon-header table with alternating row shading and highlighted PR-AUC column.
+    \item \textbf{PRBar} - horizontal progress bar for visual PR-AUC ranking.
+    \item \textbf{ImageCard} - plot container with graceful \texttt{onError} hiding.
+\end{itemize}
+
+\subsection{Key Dashboard Views}
+
+\textbf{Overview Tab:} Six StatCards (total transactions, fraud cases, experiments, best PR-AUC, graph nodes, fraud ring purity). A hypothesis confirmation panel shows before/after metric deltas. A full PR-AUC bar chart ranks all 10 models.
+
+\textbf{E5 Clustering Tab:} K-Means cluster table with inline progress bars for fraud rates and color-coded risk labels: \textit{Pure Fraud Ring} (red), \textit{High Risk} (orange), \textit{Low Risk} (yellow), \textit{Clean} (green).
+
+\textbf{Results Gallery:} PNG plots saved under \texttt{EVALUATIONS/} are mirrored into \texttt{CODE/dashboard/public/images/} for the SPA asset pipeline---Baseline (3), Graph-Enhanced (2), GraphSAGE (4), Clustering (1), EDA (7).
+
+% =========================================================
+\section{Division of Work and Team Members' Contributions}
+
+\begin{table}[htbp]
+\centering
+\caption{Team members' contributions (division of work)}
+\label{tab:contributions}
+\footnotesize
+\begin{tabular}{@{}p{0.22\columnwidth}p{0.72\columnwidth}@{}}
+\toprule
+\textbf{Member} & \textbf{Contributions} \\
+\midrule
+Luan Nguyen &
+React dashboard (\texttt{CODE/dashboard/src/App.js}), orchestrator (\texttt{CODE/main.py}), repo layout (\texttt{CODE/}, \texttt{DATA/}, \texttt{EVALUATIONS/}), GitHub upkeep. \\
+\addlinespace
+Dhanush Mugajji Shambulingappa &
+\texttt{CODE/graph.py}, Neo4j wiring, graph features (degree, PageRank, betweenness, community, merchant fraud rate), \texttt{CODE/hybrid\_models.py}. \\
+\addlinespace
+Chandra Shekhar Pavuluri &
+\texttt{CODE/graphsage.py}, PyG graph build, E4 loss and PR plots. \\
+\addlinespace
+Adrian Zhang &
+\texttt{CODE/embedding\_models.py}, encoder training, E3 RF + MLP and plots. \\
+\addlinespace
+Shashikant Nanda &
+\texttt{CODE/preprocessing.py}: cleaning, encoding, SMOTE-ENN demos, chronological split helpers, oversampling reused by baselines. \\
+\addlinespace
+Chitwandeep Kaur Palne &
+\texttt{CODE/models.py} tuning, E1 outputs, \texttt{CODE/eda.py}, \texttt{CODE/clustering.py}. \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =========================================================
+\section{Conclusions}
+
+This paper summarizes our semester fraud-detection project on BankSim: tabular baselines, graph-augmented models, GraphSAGE variants, and clustering. The main empirical takeaway matches our starting hypothesis---relational features carry signal beyond raw columns.
+
+Key findings:
+\begin{enumerate}
+    \item \textbf{Graph features improve each supervised model we ran under the stratified oversampled protocol.} LR recall rises from 0.8664 to 0.9740; RF + graph reaches PR-AUC $=$ 1.0000.
+    \item \textbf{Eleven of 49 merchants exceed 50\% fraud in exploratory plots}, which is hard to see without graph-centric summaries.
+    \item \textbf{Learned embeddings (E3) nearly match hand-crafted graph features} (PR-AUC 0.9997 vs.\ 1.0000) despite using a different training recipe.
+    \item \textbf{End-to-end GraphSAGE (E4)} favors recall over precision, suggesting ensemble or cascade designs for deployment.
+    \item \textbf{Unsupervised clustering} surfaces a 99.7\% fraud micro-cluster and DBSCAN noise with a 65.2\% fraud rate vs.\ 1.21\% base rate.
+    \item \textbf{SVM underperforms} under our sampling/tuning budget, underscoring model choice matters.
+\end{enumerate}
+
+Future work: real (non-synthetic) feeds; strict chronological evaluation; temporal graph networks; attention aggregators; streaming inference.
+
+% =========================================================
+\section*{Acknowledgment}
+The authors thank Prof.\ Hasan Davulcu and the CSE 573 Semantic Web Mining staff at Arizona State University for guidance. The BankSim dataset was sourced from Kaggle \cite{b1}. Clone and run instructions appear in Section~\ref{sec:repro}. Figures and metrics reproduce artifacts under \texttt{EVALUATIONS/}; related-work facts are cited and paraphrased by the authors.
+
+% =========================================================
+\balance
+\begin{thebibliography}{00}
+
+\bibitem{b1}
+E.\ A.\ Lopez-Rojas, A.\ Elmir, and S.\ Axelsson, ``PaySim: A financial mobile money simulator for fraud detection,'' in \textit{Proc.\ 28th European Modeling and Simulation Symposium (EMSS)}, Larnaca, Cyprus, 2016, pp.\ 249--255. Dataset: \url{https://www.kaggle.com/datasets/ealaxi/banksim1}
+
+\bibitem{b2}
+Neo4j, Inc., ``Neo4j Graph Data Science Library,'' Developer Documentation, 2024. [Online]. Available: \url{https://neo4j.com/developer/get-started/}
+
+\bibitem{b3}
+Alloy, ``2024 Fraud Statistics for Banks, Fintechs, and Credit Unions,'' Alloy Blog, 2024. [Online]. Available: \url{https://www.alloy.com/blog/2024-fraud-stats-for-banks-fintechs-and-credit-unions}
+
+\bibitem{b4}
+M.\ H.\ Abubakar, J.\ Musa, Z.\ Usman, A.\ U.\ Alkali, and M.\ Hussaini, ``Fraud detection in financial transactions using machine learning techniques: A review,'' \textit{International Journal of Computer Applications}, vol.\ 185, no.\ 5, 2023.
+
+\bibitem{b5}
+D.\ Wang, J.\ Lin, P.\ Cui, Q.\ Jia, Z.\ Wang, Y.\ Fang, Q.\ Yu, and W.\ Zhu, ``A semi-supervised graph attentive network for financial fraud detection,'' in \textit{Proc.\ IEEE International Conference on Data Mining (ICDM)}, Beijing, China, 2019, pp.\ 598--607. DOI: 10.1109/ICDM.2019.00070
+
+\bibitem{b6}
+W.\ Hamilton, Z.\ Ying, and J.\ Leskovec, ``Inductive representation learning on large graphs,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, vol.\ 30, 2017.
+
+\bibitem{b7}
+S.\ Alarfaj, I.\ Malik, H.\ U.\ Khan, N.\ Almusallam, M.\ Ramzan, and M.\ Ahmed, ``Credit card fraud detection using state-of-the-art machine learning and deep learning algorithms,'' \textit{Mathematics (MDPI)}, vol.\ 11, no.\ 13, Article 2862, 2022. DOI: 10.3390/math11132862
+
+\end{thebibliography}
+
+\end{document}

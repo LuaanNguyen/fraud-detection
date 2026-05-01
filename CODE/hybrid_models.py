@@ -24,7 +24,7 @@ from imblearn.over_sampling import RandomOverSampler
 
 from preprocessing import load_data
 from graph import FraudGraph
-from eval_utils import evaluate_model
+from models import evaluate_model
 
 warnings.filterwarnings("ignore")
 
