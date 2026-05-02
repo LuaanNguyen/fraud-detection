@@ -88,7 +88,7 @@ cpalne@asu.edu}
 
 % =========================================================
 \begin{abstract}
-We built a fraud-detection project on the BankSim synthetic banking dataset (594,643 transactions; fraud about 1.2\%; imbalance $\approx$1:81). Tabular models ignore links between customers and merchants, so we asked whether graph-side signals and a Graph Neural Network help. Our implementation runs eight sequential steps from \texttt{CODE/main.py}: baseline models (E1), hybrid models that add graph-derived features (E2), GraphSAGE embeddings plus downstream classifiers (E3), an end-to-end GraphSAGE classifier (E4), and clustering for fraud rings (E5). Graph features lift every supervised model we compared; Random Forest with graph features reaches PR-AUC $=$ 1.0000. Unsupervised K-Means surfaces a small cluster at about 99.7\% fraud without using labels. We also ship a React~19 dashboard under \texttt{CODE/dashboard/} to browse plots and tables saved under \texttt{EVALUATIONS/}.
+We built a fraud-detection project on the BankSim synthetic banking dataset (594,643 transactions; fraud about 1.2\%; imbalance $\approx$1:81). Tabular models ignore links between customers and merchants, so we asked whether graph-side signals and a Graph Neural Network help. \texttt{CODE/main.py} runs eight numbered steps: preprocessing, exploratory plots, tabular baselines (E1), Neo4j/graph feature export (Step~4) plus graph-augmented hybrids (E2, Step~5), a standalone end-to-end GraphSAGE classifier (E4, Step~6), GraphSAGE embeddings with RF/MLP heads (E3, Step~7), and unsupervised clustering (E5, Step~8). Note that Step~6 executes before Step~7 even though experiment IDs keep E3$<$E4. Graph features lift every supervised model we compared; Random Forest with graph features reaches PR-AUC $=$ 1.0000. Unsupervised K-Means surfaces a small cluster at about 99.7\% fraud without using labels. We also ship a React~19 dashboard under \texttt{CODE/dashboard/} to browse plots and tables saved under \texttt{EVALUATIONS/}.
 \end{abstract}
 
 \begin{IEEEkeywords}
@@ -106,8 +106,8 @@ We use Neo4j when it is available to materialize a bipartite graph (customers an
 
 What we deliver matches the public repository at \url{https://github.com/LuaanNguyen/fraud-detection}:
 \begin{itemize}
-    \item One driver script, \texttt{CODE/main.py}, that runs preprocessing, EDA, and experiments E1--E5 in order.
-    \item Modules under \texttt{CODE/} for preprocessing, baselines, graph features, hybrids, GraphSAGE, embeddings, and clustering; outputs written to \texttt{EVALUATIONS/}.
+    \item One driver script, \texttt{CODE/main.py}, that runs eight steps: preprocessing, EDA, E1, E2 (graph build then hybrids), E4 (standalone GraphSAGE), E3 (embedding heads), and E5 (clustering).
+    \item Modules under \texttt{CODE/} for preprocessing, EDA, baselines, graph export, hybrids, GraphSAGE, embeddings, and clustering; outputs written to \texttt{EVALUATIONS/}.
     \item Graph utilities in \texttt{CODE/graph.py} with optional Neo4j and pandas/networkx fallbacks.
     \item A training-set-only merchant fraud-rate join to avoid label leakage in E2.
     \item A React~19 dashboard under \texttt{CODE/dashboard/}.
@@ -154,72 +154,55 @@ Reviews of ML for financial fraud often discuss clustering as a way to surface s
 
 The repository is organized into three top-level folders: \texttt{CODE/} (Python modules and the React dashboard), \texttt{DATA/} (BankSim CSV committed for grading convenience, with optional \texttt{kagglehub} download if missing), and \texttt{EVALUATIONS/} (generated CSVs and figures consumed by this paper and the dashboard).
 
-The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} sketches how raw transactions flow through preprocessing and experiments E1--E5; plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
+The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} lists Steps~1--8 in the exact order the script runs them (including E4 before E3); plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
 
 \begin{figure}[!htbp]
 \centering
 \resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[node distance=0.45cm and 0.3cm]
+\begin{tikzpicture}[node distance=0.34cm and 0.3cm]
 
-  % Input
   \node[io] (csv) {BankSim CSV\\594,643 rows};
 
-  % Step 1
   \node[block, below=of csv] (prep)
-    {\textbf{Step 1}\\\texttt{CODE/preprocessing.py}\\Clean · Encode · Scale\\SMOTE-ENN demo + time split};
+    {\textbf{Step 1}\\\texttt{CODE/preprocessing.py}\\Clean, encode, scale\\SMOTE-ENN print + time-split tensors};
 
-  % Split output
-  \node[block, below=of prep] (split)
-    {Stratified train/test\\for E1 \& E2\\after oversampling};
-
-  % Step 2 EDA
-  \node[block, below left=0.45cm and -0.5cm of split, xshift=-1.2cm] (eda)
+  \node[block, below=of prep] (eda)
     {\textbf{Step 2}\\\texttt{CODE/eda.py}\\7 EDA plots};
 
-  % Three parallel experiment tracks
-  \node[exp, below=0.9cm of split, xshift=-2.8cm] (e1)
-    {\textbf{Step 3}\\\texttt{CODE/models.py}\\E1};
+  \node[exp, below=of eda] (e1)
+    {\textbf{Step 3}\\\texttt{CODE/models.py}\\E1 baselines};
 
-  \node[exp, below=0.9cm of split] (graph)
-    {\textbf{Step 4}\\\texttt{CODE/graph.py}\\Graph build};
+  \node[exp, below=of e1] (graph)
+    {\textbf{Step 4}\\\texttt{CODE/graph.py}\\Neo4j load + graph CSV};
 
-  \node[exp, below=0.9cm of split, xshift=2.8cm] (gnn)
-    {\textbf{Step 6}\\\texttt{CODE/graphsage.py}\\E4};
+  \node[exp, below=of graph] (hybrid)
+    {\textbf{Step 5}\\\texttt{CODE/hybrid\_models.py}\\E2 tabular + graph features};
 
-  % Step 5 hybrid
-  \node[exp, below=0.45cm of graph] (hybrid)
-    {\textbf{Step 5}\\\texttt{CODE/hybrid\_models.py}\\E2};
+  \node[exp, below=of hybrid] (e4)
+    {\textbf{Step 6}\\\texttt{CODE/graphsage.py}\\E4 end-to-end GNN};
 
-  % Step 7 embedding
-  \node[exp, below=0.45cm of gnn] (emb)
-    {\textbf{Step 7}\\\texttt{CODE/embedding\_models.py}\\E3};
+  \node[exp, below=of e4] (e3)
+    {\textbf{Step 7}\\\texttt{CODE/embedding\_models.py}\\E3 embeddings + RF/MLP};
 
-  % Step 8 clustering
-  \node[exp, below=0.45cm of e1] (clust)
-    {\textbf{Step 8}\\\texttt{CODE/clustering.py}\\E5};
+  \node[exp, below=of e3] (e5)
+    {\textbf{Step 8}\\\texttt{CODE/clustering.py}\\E5 K-Means + DBSCAN};
 
-  % Output
-  \node[out, below=1.1cm of hybrid] (out)
+  \node[out, below=of e5] (out)
     {\texttt{EVALUATIONS/}\\plots \& CSVs\\\texttt{CODE/dashboard/}};
 
-  % Arrows
   \draw[arrow] (csv)   -- (prep);
-  \draw[arrow] (prep)  -- (split);
-  \draw[arrow] (split) -- (eda);
-  \draw[arrow] (split) -- (e1);
-  \draw[arrow] (split) -- (graph);
-  \draw[arrow] (split) -- (gnn);
+  \draw[arrow] (prep)  -- (eda);
+  \draw[arrow] (eda)   -- (e1);
+  \draw[arrow] (e1)    -- (graph);
   \draw[arrow] (graph) -- (hybrid);
-  \draw[arrow] (gnn)   -- (emb);
-  \draw[arrow] (e1)    -- (clust);
-  \draw[arrow] (e1)    -- (out);
-  \draw[arrow] (hybrid)-- (out);
-  \draw[arrow] (emb)   -- (out);
-  \draw[arrow] (clust) -- (out);
+  \draw[arrow] (hybrid) -- (e4);
+  \draw[arrow] (e4)    -- (e3);
+  \draw[arrow] (e3)    -- (e5);
+  \draw[arrow] (e5)    -- (out);
 
 \end{tikzpicture}%
 }
-\caption{Pipeline aligned with \texttt{CODE/main.py}: preprocessing prints SMOTE-ENN and time-split diagnostics, while E1/E2 train on stratified splits after oversampling (Section~\ref{sec:arch}). Artifacts are saved under \texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
+\caption{Linear view of \texttt{CODE/main.py}: Steps~1--8 run strictly top to bottom. E1/E2 reuse stratified splits after oversampling (Section~\ref{sec:arch}); Step~6 (E4) executes before Step~7 (E3). Artifacts land under \texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -231,7 +214,15 @@ The helper also prints SMOTE-ENN balancing statistics for comparison with plain 
 
 For E1 and E2 as implemented in \texttt{CODE/models.py} and \texttt{CODE/hybrid\_models.py}, we balance fraud vs.\ legitimate rows with \textbf{random oversampling} to roughly 50/50 and then apply an \textbf{80/20 stratified train/test split} (\texttt{random\_state=42}). Hybrid models additionally attach degree, PageRank, betweenness, and community features via \texttt{FraudGraph} before splitting, then derive \texttt{merchant\_fraud\_rate} from training rows only.
 
-\subsection{Graph Construction and Feature Extraction}
+\subsection{Exploratory Data Analysis (Step 2, EDA)}
+
+Step~2 of \texttt{CODE/main.py} calls \texttt{CODE/eda.py}, which reloads the raw CSV and writes seven PNGs under \texttt{EVALUATIONS/eda/}. Those plots inform feature intuition and dashboard assets; they are independent of the stratified oversampling path used for supervised E1/E2 metrics.
+
+\subsection{Baseline Models (Step 3, E1)}
+
+Four classifiers are trained on tabular features: logistic regression ($\ell_2$, class-balanced), SVM with RBF kernel (balanced class weights, hyperparameters from \texttt{RandomizedSearchCV}), random forest (100--300 trees searched), and XGBoost (\texttt{scale\_pos\_weight}, tuned similarly).
+
+\subsection{Graph Construction and Feature Extraction (Step 4)}
 
 \texttt{CODE/graph.py} builds a bipartite graph $G=(V,E)$ with customers $V_C$, merchants $V_M$, and weighted transaction edges. Batch loads of up to 50{,}000 edges target Neo4j when it is running; otherwise pandas/networkx paths still expose the graph scalars we need. Five engineered signals per transaction row are:
 
@@ -243,17 +234,19 @@ For E1 and E2 as implemented in \texttt{CODE/models.py} and \texttt{CODE/hybrid\
     \item \textbf{Merchant fraud rate:} computed strictly from the training partition before scoring validation rows (missing merchants default to zero exposure).
 \end{itemize}
 
-\texttt{CODE/hybrid\_models.py} recomputes degree, PageRank, betweenness, and community features through \texttt{FraudGraph} before oversampling and splitting. Step~4 (\texttt{run\_graph\_pipeline()}) additionally writes consolidated graph-feature exports used elsewhere in the assignment workflow.
+Step~4 (\texttt{run\_graph\_pipeline()}) clears/reloads Neo4j when available, materializes the sample graph, and writes \texttt{EVALUATIONS/graph\_features.csv} for downstream modules.
 
-\subsection{Baseline Models (E1)}
+\subsection{Graph-Enhanced Hybrid Models (Step 5, E2)}
 
-Four classifiers are trained on tabular features: logistic regression ($\ell_2$, class-balanced), SVM with RBF kernel (balanced class weights, hyperparameters from \texttt{RandomizedSearchCV}), random forest (100--300 trees searched), and XGBoost (\texttt{scale\_pos\_weight}, tuned similarly).
+\texttt{CODE/hybrid\_models.py} recomputes degree, PageRank, betweenness, and community features through \texttt{FraudGraph} before oversampling and splitting, then trains the LR/RF/XGBoost heads reported as E2.
 
-\subsection{GraphSAGE Models (E3, E4)}
+\subsection{Standalone GraphSAGE (Step 6, E4)}
 
 Transaction rows are converted into a PyTorch Geometric \texttt{Data} object. Each node stores a three-dimensional feature vector derived from grouped means of encoded categoricals and standardized amounts (customers aggregate age, gender, and amount; merchants aggregate category and amount with a zero placeholder in the middle slot). Edges are duplicated to be bidirectional, matching \texttt{CODE/graphsage.py}.
 
 \textbf{E4 (end-to-end classifier).} \texttt{CODE/graphsage.py} stacks \textbf{three} \texttt{SAGEConv} layers with mean aggregation: two hidden layers use ReLU activations and dropout, and the final layer emits logits for the fraud vs.\ legitimate classes. Training follows the Adam optimizer with weighted cross-entropy to reflect imbalance.
+
+\subsection{GraphSAGE Embeddings + Downstream ML (Step 7, E3)}
 
 \textbf{E3 (embeddings + downstream ML).} \texttt{CODE/embedding\_models.py} trains a shallower encoder with \textbf{two} \texttt{SAGEConv} layers (hidden width 64, embedding width 32). During encoder pre-training we temporarily attach a linear head so cross-entropy loss can shape the representation; after optimization we drop that head and concatenate customer $\oplus$ merchant embeddings (64 features per transaction) for Random Forest and MLP heads evaluated with standard sklearn metrics.
 
@@ -262,7 +255,7 @@ Both setups reuse the GraphSAGE aggregation intuition~\cite{b6}:
 h_v^{(k)} = \sigma\!\left(W^{(k)} \cdot \mathrm{MEAN}\!\left(\{h_v^{(k-1)}\} \cup \{h_u^{(k-1)} : u \in \mathcal{N}(v)\}\right)\right)
 \end{equation}
 
-\subsection{Unsupervised Clustering (E5)}
+\subsection{Unsupervised Clustering (Step 8, E5)}
 
 Graph features are standardized and fed to K-Means ($k{=}5$) and DBSCAN. We report purity and silhouette for K-Means and the fraud rate among DBSCAN noise points.
 
@@ -339,6 +332,8 @@ Accuracy is not reported due to 1:81 imbalance. Primary metrics:
     \item \textbf{PR-AUC:} Area under the Precision-Recall curve (primary metric). More informative than ROC-AUC under severe imbalance.
     \item \textbf{Purity / Silhouette} (E5): Cluster quality metrics.
 \end{itemize}
+
+The subsections for GNN experiments follow \texttt{CODE/main.py}: we discuss E4 (standalone GraphSAGE, Step~6) before E3 (embedding heads, Step~7). The React dashboard still orders tabs E3 then E4 to keep experiment IDs monotonic in the UI.
 
 \subsection{E1 - Baseline Tabular ML Models}
 
@@ -423,31 +418,6 @@ Figs.~\ref{fig:e2_compare} and \ref{fig:e2_prcurves} visually confirm that every
 \label{fig:e2_prcurves}
 \end{figure}
 
-\subsection{E3 - GraphSAGE Embedding-Based Models}
-
-\begin{table}[htbp]
-\centering
-\caption{E3: GraphSAGE Embedding Model Results}
-\label{tab:e3}
-\begin{tabular}{@{}l*{4}{c}@{}}
-\toprule
-\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
-\midrule
-GraphSAGE + RF  & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
-GraphSAGE + MLP & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-GraphSAGE is trained as an encoder, extracting 32-dimensional node embeddings. Customer and merchant embeddings are concatenated to form a 64-feature transaction vector fed to RF and MLP. GraphSAGE + RF achieves PR-AUC = 0.9997 - nearly matching the manually engineered RF + Graph (1.0000) - without requiring any domain expertise in graph algorithm selection. This validates end-to-end representation learning as a viable substitute for manual graph feature engineering.
-
-\begin{figure}[htbp]
-\centering
-\includegraphics[width=\columnwidth]{e3_embedding_pr_curves.png}
-\caption{E3: PR curves for GraphSAGE embedding-based classifiers. Both GraphSAGE + RF (PR-AUC = 0.9997) and GraphSAGE + MLP (PR-AUC = 0.9987) achieve near-perfect curves, confirming that learned 32-dimensional node embeddings encode fraud-discriminative structural information.}
-\label{fig:e3_prcurves}
-\end{figure}
-
 \subsection{E4 - Standalone GraphSAGE Node Classifier}
 
 \begin{table}[htbp]
@@ -473,6 +443,31 @@ Fig.~\ref{fig:e4} shows the training loss curve and PR curve for the standalone 
 \includegraphics[width=\linewidth]{graphsage_pr_curve.png}
 \caption{E4: Top: GraphSAGE training loss over 100 epochs. Bottom: PR curve (PR-AUC $=$ 0.7143), illustrating high-recall / low-precision behavior.}
 \label{fig:e4}
+\end{figure}
+
+\subsection{E3 - GraphSAGE Embedding-Based Models}
+
+\begin{table}[htbp]
+\centering
+\caption{E3: GraphSAGE Embedding Model Results}
+\label{tab:e3}
+\begin{tabular}{@{}l*{4}{c}@{}}
+\toprule
+\textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
+\midrule
+GraphSAGE + RF  & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
+GraphSAGE + MLP & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Step~7 trains GraphSAGE as an encoder, extracting 32-dimensional node embeddings. Customer and merchant embeddings are concatenated to form a 64-feature transaction vector fed to RF and MLP. GraphSAGE + RF achieves PR-AUC = 0.9997, nearly matching the manually engineered RF + Graph (1.0000), without requiring hand-picked graph scalars. This validates learned representations as a substitute for the engineered graph feature bundle from E2.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\columnwidth]{e3_embedding_pr_curves.png}
+\caption{E3: PR curves for GraphSAGE embedding-based classifiers. Both GraphSAGE + RF (PR-AUC = 0.9997) and GraphSAGE + MLP (PR-AUC = 0.9987) achieve near-perfect curves, confirming that learned 32-dimensional node embeddings encode fraud-discriminative structural information.}
+\label{fig:e3_prcurves}
 \end{figure}
 
 \subsection{E5 - Unsupervised Fraud Ring Detection}
@@ -550,7 +545,7 @@ GS emb.\ + MLP  & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
 \begin{figure*}[!bp]
 \centering
 \includegraphics[width=\textwidth]{full_comparison.png}
-\caption{Full experiment comparison across all 10 models and four metrics. The lift from E1 (tabular baseline) to E2 (graph-enhanced) is visible. SVM is a strong negative outlier. GraphSAGE E4 favors recall over precision, while E3 embedding models approach E2 using learned representations.}
+\caption{Full experiment comparison across all 10 models and four metrics. Rows follow the same narrative as \texttt{CODE/main.py}: E1 baselines, E2 graph hybrids, E4 standalone GraphSAGE, then E3 embedding heads. SVM is a strong negative outlier. GraphSAGE E4 favors recall over precision, while E3 approaches E2 using learned representations.}
 \label{fig:full_comparison}
 \end{figure*}
 
@@ -563,7 +558,7 @@ An interactive single-page application (SPA) was built in React~19 (Create React
 
 \subsection{Navigation and Tabs}
 
-The interface has 8 tabs in a sticky header: \textbf{Overview}, \textbf{E1 Baseline}, \textbf{E2 Graph}, \textbf{E3 Embeddings}, \textbf{E4 GNN}, \textbf{E5 Clustering}, \textbf{EDA Insights}, and \textbf{Results Gallery}. Metric values are semantically color-coded: green ($\geq$0.99), amber ($\geq$0.95), yellow ($\geq$0.80), red (below 0.80).
+The interface has 8 tabs in a sticky header: \textbf{Overview}, \textbf{E1 Baseline}, \textbf{E2 Graph}, \textbf{E3 Embeddings}, \textbf{E4 GNN}, \textbf{E5 Clustering}, \textbf{EDA Insights}, and \textbf{Results Gallery}. (Experiment IDs stay sorted E1--E5 for navigation even though \texttt{CODE/main.py} executes E4 before E3.) Metric values are semantically color-coded: green ($\geq$0.99), amber ($\geq$0.95), yellow ($\geq$0.80), red (below 0.80).
 
 \subsection{Reusable Components}
 
@@ -627,8 +622,8 @@ Key findings:
 \begin{enumerate}
     \item \textbf{Graph features improve each supervised model we ran under the stratified oversampled protocol.} LR recall rises from 0.8664 to 0.9740; RF + graph reaches PR-AUC $=$ 1.0000.
     \item \textbf{Eleven of 49 merchants exceed 50\% fraud in exploratory plots}, which is hard to see without graph-centric summaries.
-    \item \textbf{Learned embeddings (E3) nearly match hand-crafted graph features} (PR-AUC 0.9997 vs.\ 1.0000) despite using a different training recipe.
     \item \textbf{End-to-end GraphSAGE (E4)} favors recall over precision, suggesting ensemble or cascade designs for deployment.
+    \item \textbf{Learned embeddings (E3) nearly match hand-crafted graph features} (PR-AUC 0.9997 vs.\ 1.0000) despite using a different training recipe.
     \item \textbf{Unsupervised clustering} surfaces a 99.7\% fraud micro-cluster and DBSCAN noise with a 65.2\% fraud rate vs.\ 1.21\% base rate.
     \item \textbf{SVM underperforms} under our sampling/tuning budget, underscoring model choice matters.
 \end{enumerate}
