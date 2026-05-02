@@ -1,4 +1,4 @@
-% CSE 573 — submit PDF named: Group23-Project10-S26-Final Project Report.pdf
+% CSE 573: submit PDF named: Group23-Project10-S26-Final Project Report.pdf
 % Source: compile from repository root so \graphicspath{EVALUATIONS/...} resolves:
 %   pdflatex "Group23-Project10-S26-Final Project Report.tex" (run twice)
 \documentclass[conference]{IEEEtran}
@@ -98,7 +98,7 @@ fraud detection, graph neural networks, GraphSAGE, Neo4j, class imbalance, SMOTE
 % =========================================================
 \section{Introduction}
 
-Industry surveys report that fraud losses stay high even as banks spend more on prevention \cite{b3}. For our project, three issues stood out: fraud is rare (under about 2\% here), attackers change behavior over time, and fraud often shows up through \textit{relationships} between customers and merchants—not only through single-row attributes.
+Industry surveys report that fraud losses stay high even as banks spend more on prevention \cite{b3}. For our project, three issues stood out: fraud is rare (under about 2\% here), attackers change behavior over time, and fraud often shows up through \textit{relationships} between customers and merchants, not only through single-row attributes.
 
 Standard supervised models use one feature vector per transaction. Tree ensembles work well on tables, but they do not automatically encode network structure. Patterns such as many accounts tying back to the same risky merchant are easier to see once we view transactions as a graph.
 
@@ -227,7 +227,7 @@ The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} sketch
 
 \texttt{CODE/preprocessing.py} loads \texttt{DATA/bs140513\_032310.csv} (already checked into GitHub for easier grading) or downloads BankSim through \texttt{kagglehub} when the file is absent. Rows are cleaned (constant \texttt{zipcodeOri}/\texttt{zipMerchant} removed when degenerate), categoricals are label-encoded, and \texttt{amount} is standardized.
 
-The helper also prints SMOTE-ENN balancing statistics for comparison with plain oversampling and undersampling—this is what Step~1 of \texttt{CODE/main.py} exercises. Separately, it computes a chronological split on \texttt{step} and exposes those matrices as \texttt{X\_train\_time}/\texttt{X\_test\_time}; \textbf{those tensors are not used} by the supervised experiments whose metrics appear in Section~\ref{sec:eval}.
+The helper also prints SMOTE-ENN balancing statistics for comparison with plain oversampling and undersampling; this is what Step~1 of \texttt{CODE/main.py} exercises. Separately, it computes a chronological split on \texttt{step} and exposes those matrices as \texttt{X\_train\_time}/\texttt{X\_test\_time}; \textbf{those tensors are not used} by the supervised experiments whose metrics appear in Section~\ref{sec:eval}.
 
 For E1 and E2 as implemented in \texttt{CODE/models.py} and \texttt{CODE/hybrid\_models.py}, we balance fraud vs.\ legitimate rows with \textbf{random oversampling} to roughly 50/50 and then apply an \textbf{80/20 stratified train/test split} (\texttt{random\_state=42}). Hybrid models additionally attach degree, PageRank, betweenness, and community features via \texttt{FraudGraph} before splitting, then derive \texttt{merchant\_fraud\_rate} from training rows only.
 
@@ -236,11 +236,11 @@ For E1 and E2 as implemented in \texttt{CODE/models.py} and \texttt{CODE/hybrid\
 \texttt{CODE/graph.py} builds a bipartite graph $G=(V,E)$ with customers $V_C$, merchants $V_M$, and weighted transaction edges. Batch loads of up to 50{,}000 edges target Neo4j when it is running; otherwise pandas/networkx paths still expose the graph scalars we need. Five engineered signals per transaction row are:
 
 \begin{itemize}
-    \item \textbf{Degree centrality} --- counts how often a node appears.
-    \item \textbf{PageRank} --- importance-style score on the bipartite graph.
-    \item \textbf{Betweenness centrality} --- highlights bridges between regions (Neo4j GDS or \texttt{networkx} fallback).
-    \item \textbf{Community ID} --- Louvain-style grouping (again with a Python fallback).
-    \item \textbf{Merchant fraud rate} --- computed strictly from the training partition before scoring validation rows (missing merchants default to zero exposure).
+    \item \textbf{Degree centrality:} counts how often a node appears.
+    \item \textbf{PageRank:} importance-style score on the bipartite graph.
+    \item \textbf{Betweenness centrality:} highlights bridges between regions (Neo4j GDS or \texttt{networkx} fallback).
+    \item \textbf{Community ID:} Louvain-style grouping (again with a Python fallback).
+    \item \textbf{Merchant fraud rate:} computed strictly from the training partition before scoring validation rows (missing merchants default to zero exposure).
 \end{itemize}
 
 \texttt{CODE/hybrid\_models.py} recomputes degree, PageRank, betweenness, and community features through \texttt{FraudGraph} before oversampling and splitting. Step~4 (\texttt{run\_graph\_pipeline()}) additionally writes consolidated graph-feature exports used elsewhere in the assignment workflow.
@@ -253,9 +253,9 @@ Four classifiers are trained on tabular features: logistic regression ($\ell_2$,
 
 Transaction rows are converted into a PyTorch Geometric \texttt{Data} object. Each node stores a three-dimensional feature vector derived from grouped means of encoded categoricals and standardized amounts (customers aggregate age, gender, and amount; merchants aggregate category and amount with a zero placeholder in the middle slot). Edges are duplicated to be bidirectional, matching \texttt{CODE/graphsage.py}.
 
-\textbf{E4 --- end-to-end classifier.} \texttt{CODE/graphsage.py} stacks \textbf{three} \texttt{SAGEConv} layers with mean aggregation: two hidden layers use ReLU activations and dropout, and the final layer emits logits for the fraud vs.\ legitimate classes. Training follows the Adam optimizer with weighted cross-entropy to reflect imbalance.
+\textbf{E4 (end-to-end classifier).} \texttt{CODE/graphsage.py} stacks \textbf{three} \texttt{SAGEConv} layers with mean aggregation: two hidden layers use ReLU activations and dropout, and the final layer emits logits for the fraud vs.\ legitimate classes. Training follows the Adam optimizer with weighted cross-entropy to reflect imbalance.
 
-\textbf{E3 --- embeddings + downstream ML.} \texttt{CODE/embedding\_models.py} trains a shallower encoder with \textbf{two} \texttt{SAGEConv} layers (hidden width 64, embedding width 32). During encoder pre-training we temporarily attach a linear head so cross-entropy loss can shape the representation; after optimization we drop that head and concatenate customer $\oplus$ merchant embeddings (64 features per transaction) for Random Forest and MLP heads evaluated with standard sklearn metrics.
+\textbf{E3 (embeddings + downstream ML).} \texttt{CODE/embedding\_models.py} trains a shallower encoder with \textbf{two} \texttt{SAGEConv} layers (hidden width 64, embedding width 32). During encoder pre-training we temporarily attach a linear head so cross-entropy loss can shape the representation; after optimization we drop that head and concatenate customer $\oplus$ merchant embeddings (64 features per transaction) for Random Forest and MLP heads evaluated with standard sklearn metrics.
 
 Both setups reuse the GraphSAGE aggregation intuition~\cite{b6}:
 \begin{equation}
@@ -266,7 +266,7 @@ h_v^{(k)} = \sigma\!\left(W^{(k)} \cdot \mathrm{MEAN}\!\left(\{h_v^{(k-1)}\} \cu
 
 Graph features are standardized and fed to K-Means ($k{=}5$) and DBSCAN. We report purity and silhouette for K-Means and the fraud rate among DBSCAN noise points.
 
-% -------------------------------------------------------------
+% (subsection break)
 \subsection{Reproducibility}
 \label{sec:repro}
 Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. The course presentation slides are at \url{https://docs.google.com/presentation/d/1QJT9qdFStGxqHnXBWEWXTRCaPOwXrT6CSsuSeePPO2U/edit?usp=sharing}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
@@ -306,7 +306,7 @@ Fig.~\ref{fig:eda_class} shows class imbalance and category-level fraud patterns
 \centering
 \includegraphics[width=\linewidth]{01_class_distribution.png}\\[0.4em]
 \includegraphics[width=\linewidth]{02_fraud_by_category.png}
-\caption{Top: Class distribution (1:81 fraud-to-legitimate imbalance). Bottom: Fraud rate per merchant category---\texttt{es\_leisure} (87\%) and \texttt{es\_travel} (79\%) are the highest-risk categories.}
+\caption{Top: Class distribution (1:81 fraud-to-legitimate imbalance). Bottom: Fraud rate per merchant category: \texttt{es\_leisure} (87\%) and \texttt{es\_travel} (79\%) are the highest-risk categories.}
 \label{fig:eda_class}
 \end{figure}
 
@@ -314,7 +314,7 @@ Fig.~\ref{fig:eda_class} shows class imbalance and category-level fraud patterns
 \centering
 \includegraphics[width=\linewidth]{03_amount_distribution.png}\\[0.4em]
 \includegraphics[width=\linewidth]{07_correlation_heatmap.png}
-\caption{Top: Transaction amount distributions (fraudulent transactions skew higher). Bottom: Feature correlation heatmap---\texttt{amount} (0.49) is the strongest predictor; \texttt{step} trends negatively as simulated time progresses.}
+\caption{Top: Transaction amount distributions (fraudulent transactions skew higher). Bottom: Feature correlation heatmap: \texttt{amount} (0.49) is the strongest predictor; \texttt{step} trends negatively as simulated time progresses.}
 \label{fig:eda_heatmap}
 \end{figure}
 
@@ -322,7 +322,7 @@ Fig.~\ref{fig:eda_class} shows class imbalance and category-level fraud patterns
 \centering
 \includegraphics[width=\linewidth]{04_fraud_over_time.png}\\[0.4em]
 \includegraphics[width=\linewidth]{06_merchant_fraud.png}
-\caption{Top: Fraud count and fraud rate over the 180 time steps. Bottom: Merchant-level fraud---eleven of 49 merchants exceed 50\% fraud rate, which is hard to see without graph-oriented summaries.}
+\caption{Top: Fraud count and fraud rate over the 180 time steps. Bottom: Merchant-level fraud: eleven of 49 merchants exceed 50\% fraud rate, which is hard to see without graph-oriented summaries.}
 \label{fig:eda_temporal}
 \end{figure}
 
@@ -471,7 +471,7 @@ Fig.~\ref{fig:e4} shows the training loss curve and PR curve for the standalone 
 \centering
 \includegraphics[width=\linewidth]{graphsage_loss.png}\\[0.4em]
 \includegraphics[width=\linewidth]{graphsage_pr_curve.png}
-\caption{E4: Top---GraphSAGE training loss over 100 epochs. Bottom---PR curve (PR-AUC $=$ 0.7143), illustrating high-recall / low-precision behavior.}
+\caption{E4: Top: GraphSAGE training loss over 100 epochs. Bottom: PR curve (PR-AUC $=$ 0.7143), illustrating high-recall / low-precision behavior.}
 \label{fig:e4}
 \end{figure}
 
@@ -583,7 +583,7 @@ Six reusable functional React components:
 
 \textbf{E5 Clustering Tab:} K-Means cluster table with inline progress bars for fraud rates and color-coded risk labels: \textit{Pure Fraud Ring} (red), \textit{High Risk} (orange), \textit{Low Risk} (yellow), \textit{Clean} (green).
 
-\textbf{Results Gallery:} PNG plots saved under \texttt{EVALUATIONS/} are mirrored into \texttt{CODE/dashboard/public/images/} for the SPA asset pipeline---Baseline (3), Graph-Enhanced (2), GraphSAGE (4), Clustering (1), EDA (7).
+\textbf{Results Gallery:} PNG plots saved under \texttt{EVALUATIONS/} are mirrored into \texttt{CODE/dashboard/public/images/} for the SPA asset pipeline: Baseline (3), Graph-Enhanced (2), GraphSAGE (4), Clustering (1), EDA (7).
 
 % =========================================================
 \section{Division of Work and Team Members' Contributions}
@@ -621,7 +621,7 @@ Chitwandeep Kaur Palne &
 % =========================================================
 \section{Conclusions}
 
-This paper summarizes our semester fraud-detection project on BankSim: tabular baselines, graph-augmented models, GraphSAGE variants, and clustering. The main empirical takeaway matches our starting hypothesis---relational features carry signal beyond raw columns.
+This paper summarizes our semester fraud-detection project on BankSim: tabular baselines, graph-augmented models, GraphSAGE variants, and clustering. The main empirical takeaway matches our starting hypothesis: relational features carry signal beyond raw columns.
 
 Key findings:
 \begin{enumerate}
