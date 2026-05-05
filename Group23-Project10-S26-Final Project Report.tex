@@ -6,6 +6,7 @@
 
 \usepackage{dblfloatfix}
 \usepackage{placeins}
+\usepackage{float}
 \usepackage{cite}
 \usepackage[T1]{fontenc}
 \usepackage{amsmath,amssymb,amsfonts}
@@ -19,12 +20,10 @@
 \usepackage{tikz}
 \usepackage{url}
 \usepackage{microtype}
-% IEEE/compatibility: hidelinks avoids colored boxes; omit hyperref if your venue forbids it.
 \usepackage[hidelinks]{hyperref}
 \usepackage{balance}
 \usetikzlibrary{shapes.geometric, arrows.meta, positioning, fit, backgrounds}
 
-% Compile from repository root so figures resolve (EVALUATIONS/ at repo top level).
 \graphicspath{
   {EVALUATIONS/}
   {EVALUATIONS/eda/}
@@ -34,7 +33,6 @@
 \def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
     T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
 
-% TikZ styles for pipeline diagram
 \tikzset{
   block/.style  = {rectangle, draw, fill=blue!10, text width=3.8cm,
                    align=center, rounded corners, minimum height=0.7cm, font=\small},
@@ -54,34 +52,34 @@
 
 \author{
 \IEEEauthorblockN{Luan Nguyen}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1225177265\\
 Arizona State University, Tempe, AZ\\
-ltnguy58@asu.edu}
+\href{mailto:ltnguy58@asu.edu}{ltnguy58@asu.edu}}
 \and
 \IEEEauthorblockN{Dhanush Mugajji Shambulingappa}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1237526292\\
 Arizona State University, Tempe, AZ\\
-dmugajji@asu.edu}
+\href{mailto:dmugajji@asu.edu}{dmugajji@asu.edu}}
 \and
 \IEEEauthorblockN{Chandra Shekhar Pavuluri}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1236078196\\
 Arizona State University, Tempe, AZ\\
-cpavulur@asu.edu}
+\href{mailto:cpavulur@asu.edu}{cpavulur@asu.edu}}
 \and
 \IEEEauthorblockN{Adrian Zhang}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1224664415\\
 Arizona State University, Tempe, AZ\\
-awzhang1@asu.edu}
+\href{mailto:awzhang1@asu.edu}{awzhang1@asu.edu}}
 \and
 \IEEEauthorblockN{Shashikant Nanda}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1235508926\\
 Arizona State University, Tempe, AZ\\
-snanda5@asu.edu}
+\href{mailto:snanda5@asu.edu}{snanda5@asu.edu}}
 \and
 \IEEEauthorblockN{Chitwandeep Kaur Palne}
-\IEEEauthorblockA{\textit{School of Computing \& Aug. Intelligence}\\
+\IEEEauthorblockA{ASU ID: 1231519031\\
 Arizona State University, Tempe, AZ\\
-cpalne@asu.edu}
+\href{mailto:cpalne@asu.edu}{cpalne@asu.edu}}
 }
 
 \maketitle
@@ -92,7 +90,7 @@ We built a fraud-detection project on the BankSim synthetic banking dataset (594
 \end{abstract}
 
 \begin{IEEEkeywords}
-fraud detection, graph neural networks, GraphSAGE, Neo4j, class imbalance, SMOTE-ENN, random oversampling, graph features, unsupervised clustering
+fraud detection, graph neural networks, GraphSAGE, Neo4j, class imbalance handling, graph features, unsupervised clustering
 \end{IEEEkeywords}
 
 % =========================================================
@@ -135,7 +133,7 @@ Key challenges:
 Survey work on fraud detection with classical and deep models highlights tree ensembles and boosting as strong tabular baselines, often improved by careful tuning \cite{b7}. We follow that pattern with logistic regression, SVM, random forest, and XGBoost before adding graph views.
 
 \textbf{Class imbalance.}
-Combine-and-clean resampling methods such as SMOTE-ENN oversample the minority class and then drop noisy neighbors so class boundaries are less jagged \cite{b7}. Our pipeline prints SMOTE-ENN statistics for comparison, while the reported E1/E2 experiments currently train on random oversampling plus a stratified split (Section~\ref{sec:arch}).
+Combine-and-clean resampling methods such as SMOTE-ENN oversample the minority class and then drop noisy neighbors so class boundaries are less jagged \cite{b7}. Our pipeline prints SMOTE-ENN statistics for comparison, while the reported E1/E2 experiments train on random oversampling plus a stratified split (Section~\ref{sec:arch}).
 
 \textbf{Graph-based fraud detection.}
 Wang et al.\ \cite{b5} use a semi-supervised graph attentive network (SemiGNN) for relational fraud, which motivates modeling transactions as a graph rather than isolated rows. Tooling such as Neo4j Graph Data Science implements standard centrality and community algorithms we optionally call when a database is reachable \cite{b2}.
@@ -154,55 +152,15 @@ Reviews of ML for financial fraud often discuss clustering as a way to surface s
 
 The repository is organized into three top-level folders: \texttt{CODE/} (Python modules and the React dashboard), \texttt{DATA/} (BankSim CSV committed for grading convenience, with optional \texttt{kagglehub} download if missing), and \texttt{EVALUATIONS/} (generated CSVs and figures consumed by this paper and the dashboard).
 
-The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} lists Steps~1--8 in the exact order the script runs them (including E4 before E3); plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
+The runtime entry point is \texttt{CODE/main.py}. Fig.~\ref{fig:pipeline} shows Steps~1--8 in the exact order the script runs them (including E4 before E3); plots and metrics land under \texttt{EVALUATIONS/}. Per \texttt{README.md}, run commands from the repository root (for example \texttt{python CODE/main.py}). Long hyperparameter searches may require adjusting parallel backend settings on some operating systems.
 
 \begin{figure}[!htbp]
 \centering
-\resizebox{\linewidth}{!}{%
-\begin{tikzpicture}[node distance=0.34cm and 0.3cm]
-
-  \node[io] (csv) {BankSim CSV\\594,643 rows};
-
-  \node[block, below=of csv] (prep)
-    {\textbf{Step 1}\\\texttt{CODE/preprocessing.py}\\Clean, encode, scale\\SMOTE-ENN print + time-split tensors};
-
-  \node[block, below=of prep] (eda)
-    {\textbf{Step 2}\\\texttt{CODE/eda.py}\\7 EDA plots};
-
-  \node[exp, below=of eda] (e1)
-    {\textbf{Step 3}\\\texttt{CODE/models.py}\\E1 baselines};
-
-  \node[exp, below=of e1] (graph)
-    {\textbf{Step 4}\\\texttt{CODE/graph.py}\\Neo4j load + graph CSV};
-
-  \node[exp, below=of graph] (hybrid)
-    {\textbf{Step 5}\\\texttt{CODE/hybrid\_models.py}\\E2 tabular + graph features};
-
-  \node[exp, below=of hybrid] (e4)
-    {\textbf{Step 6}\\\texttt{CODE/graphsage.py}\\E4 end-to-end GNN};
-
-  \node[exp, below=of e4] (e3)
-    {\textbf{Step 7}\\\texttt{CODE/embedding\_models.py}\\E3 embeddings + RF/MLP};
-
-  \node[exp, below=of e3] (e5)
-    {\textbf{Step 8}\\\texttt{CODE/clustering.py}\\E5 K-Means + DBSCAN};
-
-  \node[out, below=of e5] (out)
-    {\texttt{EVALUATIONS/}\\plots \& CSVs\\\texttt{CODE/dashboard/}};
-
-  \draw[arrow] (csv)   -- (prep);
-  \draw[arrow] (prep)  -- (eda);
-  \draw[arrow] (eda)   -- (e1);
-  \draw[arrow] (e1)    -- (graph);
-  \draw[arrow] (graph) -- (hybrid);
-  \draw[arrow] (hybrid) -- (e4);
-  \draw[arrow] (e4)    -- (e3);
-  \draw[arrow] (e3)    -- (e5);
-  \draw[arrow] (e5)    -- (out);
-
-\end{tikzpicture}%
-}
-\caption{Linear view of \texttt{CODE/main.py}: Steps~1--8 run strictly top to bottom. E1/E2 reuse stratified splits after oversampling (Section~\ref{sec:arch}); Step~6 (E4) executes before Step~7 (E3). Artifacts land under \texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
+\includegraphics[width=1.05\linewidth]{system_pipeline.png}
+\caption{Linear view of \texttt{CODE/main.py}: Steps~1--8 run strictly
+top to bottom. E1/E2 reuse stratified splits after random oversampling;
+Step~6 (E4) executes before Step~7 (E3). Artifacts land under
+\texttt{EVALUATIONS/}; the UI lives under \texttt{CODE/dashboard/}.}
 \label{fig:pipeline}
 \end{figure}
 
@@ -259,17 +217,16 @@ h_v^{(k)} = \sigma\!\left(W^{(k)} \cdot \mathrm{MEAN}\!\left(\{h_v^{(k-1)}\} \cu
 
 Graph features are standardized and fed to K-Means ($k{=}5$) and DBSCAN. We report purity and silhouette for K-Means and the fraud rate among DBSCAN noise points.
 
-% (subsection break)
 \subsection{Reproducibility}
 \label{sec:repro}
-Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. The course presentation slides are at \url{https://docs.google.com/presentation/d/1QJT9qdFStGxqHnXBWEWXTRCaPOwXrT6CSsuSeePPO2U/edit?usp=sharing}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
+Code and CSV artifacts live at \url{https://github.com/LuaanNguyen/fraud-detection}. From the repository root: create a virtual environment, run \texttt{pip install -r CODE/requirements.txt}, place or download BankSim into \texttt{DATA/}, then run \texttt{python CODE/main.py}. Figures for this document assume compilation from the same root with \texttt{EVALUATIONS/} populated by that script (or equivalent module runs). The dashboard uses \texttt{npm install} / \texttt{npm start} inside \texttt{CODE/dashboard/}.
 
 % =========================================================
 \section{Datasets (Descriptions, Sizes and Preprocessing Steps)}
 
 BankSim \cite{b1} is a synthetic banking dataset from a graph-simulation of real Spanish banking data, publicly available on Kaggle. Table~\ref{tab:dataset} summarizes its statistics.
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{BankSim Dataset Statistics}
 \label{tab:dataset}
@@ -337,7 +294,7 @@ The subsections for GNN experiments follow \texttt{CODE/main.py}: we discuss E4 
 
 \subsection{E1 - Baseline Tabular ML Models}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{E1: Baseline Tabular ML Results}
 \label{tab:e1}
@@ -366,7 +323,7 @@ Fig.~\ref{fig:e1_prcurves} shows the PR curves for all four baseline models. The
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{confusion_matrices.png}
+\includegraphics[width=1\columnwidth]{confusion_matrices.png}
 \caption{E1: Confusion matrices for all four baseline models. RF shows near-zero false negatives (catches all fraud). SVM produces a high number of both false positives and false negatives, confirming its failure.}
 \label{fig:e1_confusion}
 \end{figure}
@@ -380,7 +337,7 @@ Fig.~\ref{fig:e1_prcurves} shows the PR curves for all four baseline models. The
 
 \subsection{E2 - Graph-Enhanced Hybrid Models}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{E2: Graph-Enhanced ML Results vs.\ Baseline}
 \label{tab:e2}
@@ -406,21 +363,21 @@ Figs.~\ref{fig:e2_compare} and \ref{fig:e2_prcurves} visually confirm that every
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{baseline_vs_hybrid.png}
+\includegraphics[width=1\columnwidth]{baseline_vs_hybrid.png}
 \caption{E2: Bar chart comparing baseline vs.\ graph-enhanced models across all metrics. Logistic Regression shows the largest visible improvement, particularly in Recall. RF achieves the maximum possible PR-AUC of 1.0000 with graph features.}
 \label{fig:e2_compare}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\columnwidth]{pr_curves_comparison.png}
+\includegraphics[width=1\columnwidth]{pr_curves_comparison.png}
 \caption{E2: Overlaid PR curves - baseline (dashed) vs.\ graph-enhanced (solid) for each model. All three graph-enhanced curves sit above their baseline counterparts. RF + Graph (solid green) achieves a perfect curve at the top-right corner.}
 \label{fig:e2_prcurves}
 \end{figure}
 
 \subsection{E4 - Standalone GraphSAGE Node Classifier}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{E4: Standalone GraphSAGE Results}
 \label{tab:e4}
@@ -447,7 +404,7 @@ Fig.~\ref{fig:e4} shows the training loss curve and PR curve for the standalone 
 
 \subsection{E3 - GraphSAGE Embedding-Based Models}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{E3: GraphSAGE Embedding Model Results}
 \label{tab:e3}
@@ -472,7 +429,7 @@ Step~7 trains GraphSAGE as an encoder, extracting 32-dimensional node embeddings
 
 \subsection{E5 - Unsupervised Fraud Ring Detection}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{E5: Clustering Metrics}
 \label{tab:e5}
@@ -490,7 +447,7 @@ Overall fraud rate      & 1.21\% \\
 \end{tabular}
 \end{table}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
 \caption{K-Means Cluster Fraud Analysis}
 \label{tab:clusters}
@@ -507,54 +464,64 @@ Overall fraud rate      & 1.21\% \\
 \end{tabular}
 \end{table}
 
-K-Means (k=5) achieves Silhouette = 0.6315 (good structure) and Purity = 0.9916 (near-perfect cluster homogeneity). \textbf{Cluster 4: 337 transactions at 99.7\% fraud - a virtually pure fraud ring, discovered entirely without labels.} Cluster 3 (8,240 transactions, 61.4\% fraud) identifies a high-risk zone. DBSCAN independently validates: noise points have 65.22\% fraud rate - \textbf{54$\times$ higher than the overall 1.21\% baseline}. This dual finding confirms fraud is simultaneously \textit{clustered} (organized rings with shared graph signatures) and \textit{anomalous} (outliers inconsistent with legitimate behavior).
+K-Means ($k$=5) achieves Silhouette = 0.6315 (good structure) and Purity = 0.9916 (near-perfect cluster homogeneity). \textbf{Cluster 4: 337 transactions at 99.7\% fraud --- a virtually pure fraud ring, discovered entirely without labels.} Cluster 3 (8,240 transactions, 61.4\% fraud) identifies a high-risk zone. DBSCAN independently validates: noise points have 65.22\% fraud rate --- \textbf{54$\times$ higher than the overall 1.21\% baseline}. This dual finding confirms fraud is simultaneously \textit{clustered} (organized rings with shared graph signatures) and \textit{anomalous} (outliers inconsistent with legitimate behavior). Fig. \ref{fig:e5_clustering} shows the 2×2 clustering visualization confirming these findings.
 
 \begin{figure}[!htbp]
 \centering
-\includegraphics[width=\linewidth]{clustering/clustering_results.png}
-\caption{E5: 2$\times$2 clustering visualization. Top-left: K-Means cluster scatter (PCA-reduced, colored by cluster). Top-right: Per-cluster fraud rate bar chart - Cluster 4's 99.7\% bar stands dramatically above all others. Bottom-left: DBSCAN scatter with noise points highlighted. Bottom-right: Cluster size distribution showing Cluster 0 dominates with 439K legitimate transactions.}
+\includegraphics[width=\linewidth]{clustering_results.png}
+\caption{E5: 2$\times$2 clustering visualization. Top-left: K-Means cluster scatter (PCA-reduced, colored by cluster). Top-right: Per-cluster fraud rate bar chart --- Cluster 4's 99.7\% bar stands dramatically above all others. Bottom-left: DBSCAN scatter with noise points highlighted. Bottom-right: Cluster size distribution showing Cluster 0 dominates with 439K legitimate transactions.}
 \label{fig:e5_clustering}
 \end{figure}
 
 \subsection{Full Experiment Comparison}
 
-\begin{table*}[!bp]
+Table~\ref{tab:full} and Fig.~\ref{fig:full_comparison} consolidate results across all ten models spanning E1 through E5. RF with graph features achieves the highest overall PR-AUC of 1.0000, while GraphSAGE embeddings (E3) come close at 0.9997 without any manual feature engineering. SVM is the clear negative outlier and standalone GraphSAGE (E4) trades precision for high recall --- a useful property in a recall-oriented triage stage.
+
+\begin{table}[H]
 \centering
-\caption{Full Model Comparison: All Experiments}
+\caption{Full Model Comparison Across All Experiments}
 \label{tab:full}
-\small
-\setlength{\tabcolsep}{8pt}
-\begin{tabular}{@{}l*{4}{c}@{}}
+\scriptsize
+\setlength{\tabcolsep}{4.5pt}
+\renewcommand{\arraystretch}{0.92}
+\begin{tabular}{@{}lcccc@{}}
 \toprule
 \textbf{Model} & \textbf{Prec.} & \textbf{Rec.} & \textbf{F1} & \textbf{PR-AUC} \\
 \midrule
-LR (Baseline)   & 0.9491 & 0.8664 & 0.9059 & 0.9714 \\
-SVM (Baseline)  & 0.2617 & 0.3141 & 0.2855 & 0.4904 \\
-RF (Baseline)   & 0.9949 & 1.0000 & 0.9975 & 0.9990 \\
-XGB (Baseline)  & 0.9432 & 1.0000 & 0.9708 & 0.9953 \\
-LR + Graph      & 0.9682 & 0.9740 & 0.9711 & 0.9959 \\
-\textbf{RF + Graph} & \textbf{0.9976} & \textbf{1.0000} & \textbf{0.9988} & \textbf{1.0000} \\
-XGB + Graph     & 0.9792 & 1.0000 & 0.9895 & 0.9993 \\
-GraphSAGE (E4)  & 0.4344 & 0.9298 & 0.5922 & 0.7143 \\
-GS emb.\ + RF   & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
-GS emb.\ + MLP  & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
+LR (E1)              & 0.9491 & 0.8664 & 0.9059 & 0.9714 \\
+SVM (E1)             & 0.2617 & 0.3141 & 0.2855 & 0.4904 \\
+RF (E1)              & 0.9949 & 1.0000 & 0.9975 & 0.9990 \\
+XGB (E1)             & 0.9432 & 1.0000 & 0.9708 & 0.9953 \\
+LR + Graph (E2)      & 0.9682 & 0.9740 & 0.9711 & 0.9959 \\
+\textbf{RF + Graph (E2)} & \textbf{0.9976} & \textbf{1.0000} & \textbf{0.9988} & \textbf{1.0000} \\
+XGB + Graph (E2)     & 0.9792 & 1.0000 & 0.9895 & 0.9993 \\
+GraphSAGE (E4)       & 0.4344 & 0.9298 & 0.5922 & 0.7143 \\
+GS + RF (E3)         & 0.9963 & 1.0000 & 0.9981 & 0.9997 \\
+GS + MLP (E3)        & 0.9933 & 1.0000 & 0.9966 & 0.9987 \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-\begin{figure*}[!bp]
+\begin{figure}[H]
 \centering
-\includegraphics[width=\textwidth]{full_comparison.png}
-\caption{Full experiment comparison across all 10 models and four metrics. Rows follow the same narrative as \texttt{CODE/main.py}: E1 baselines, E2 graph hybrids, E4 standalone GraphSAGE, then E3 embedding heads. SVM is a strong negative outlier. GraphSAGE E4 favors recall over precision, while E3 approaches E2 using learned representations.}
+\includegraphics[width=\columnwidth]{full_comparison.png}
+\caption{Full comparison across 10 models and four metrics spanning E1 through E5. SVM is the main negative outlier; GraphSAGE (E4) favors recall over precision, while E3 embedding models approach E2 graph-enhanced performance using learned representations.}
 \label{fig:full_comparison}
-\end{figure*}
+\end{figure}
 
 % =========================================================
 \section{UI / Visualization Interface Designs}
 
 \subsection{Overview}
 
-An interactive single-page application (SPA) was built in React~19 (Create React App scaffold in \texttt{CODE/dashboard/}) and served at \texttt{http://localhost:3000}. It uses no external UI component library - all layout and styling is pure inline CSS, keeping the bundle lean. The dashboard is branded with ASU's official colors: Maroon (\texttt{\#8C1D40}) for headers and active states, Gold (\texttt{\#FFC627}) for section accents.
+An interactive single-page application (SPA) was built in React~19 (Create React App scaffold in \texttt{CODE/dashboard/}) and served at \texttt{http://localhost:3000}. It uses no external UI component library --- all layout and styling is pure inline CSS, keeping the bundle lean. The dashboard is branded with ASU's official colors: Maroon (\texttt{\#8C1D40}) for headers and active states, Gold (\texttt{\#FFC627}) for section accents. Fig.~\ref{fig:dashboard} shows the dashboard Results Gallery tab with all generated plots organized by experiment tier.
+
+\begin{figure}[H]
+\centering
+\fbox{\includegraphics[width=1\columnwidth]{unnamed.png}}
+\caption{React 19 dashboard Results Gallery tab showing all generated plots organized by experiment tier. The dashboard is served at localhost:3000 with 8 tabs covering all five experiments.}
+\label{fig:dashboard}
+\end{figure}
 
 \subsection{Navigation and Tabs}
 
@@ -583,9 +550,9 @@ Six reusable functional React components:
 % =========================================================
 \section{Division of Work and Team Members' Contributions}
 
-\begin{table}[htbp]
+\begin{table}[H]
 \centering
-\caption{Team members' contributions (division of work)}
+\caption{Team Members' Contributions (Division of Work)}
 \label{tab:contributions}
 \footnotesize
 \begin{tabular}{@{}p{0.22\columnwidth}p{0.72\columnwidth}@{}}
@@ -620,19 +587,19 @@ This paper summarizes our semester fraud-detection project on BankSim: tabular b
 
 Key findings:
 \begin{enumerate}
-    \item \textbf{Graph features improve each supervised model we ran under the stratified oversampled protocol.} LR recall rises from 0.8664 to 0.9740; RF + graph reaches PR-AUC $=$ 1.0000.
-    \item \textbf{Eleven of 49 merchants exceed 50\% fraud in exploratory plots}, which is hard to see without graph-centric summaries.
+    \item \textbf{Graph features improve each supervised model} under the stratified oversampled protocol. LR recall rises from 0.8664 to 0.9740; RF + graph reaches PR-AUC $=$ 1.0000.
+    \item \textbf{Eleven of 49 merchants exceed 50\% fraud} in exploratory plots, which is hard to see without graph-centric summaries.
     \item \textbf{End-to-end GraphSAGE (E4)} favors recall over precision, suggesting ensemble or cascade designs for deployment.
     \item \textbf{Learned embeddings (E3) nearly match hand-crafted graph features} (PR-AUC 0.9997 vs.\ 1.0000) despite using a different training recipe.
     \item \textbf{Unsupervised clustering} surfaces a 99.7\% fraud micro-cluster and DBSCAN noise with a 65.2\% fraud rate vs.\ 1.21\% base rate.
-    \item \textbf{SVM underperforms} under our sampling/tuning budget, underscoring model choice matters.
+    \item \textbf{SVM underperforms} under our sampling/tuning budget, underscoring that model choice matters.
 \end{enumerate}
 
 Future work: real (non-synthetic) feeds; strict chronological evaluation; temporal graph networks; attention aggregators; streaming inference.
 
 % =========================================================
 \section*{Acknowledgment}
-The authors thank Prof.\ Hasan Davulcu and the CSE 573 Semantic Web Mining staff at Arizona State University for guidance. The BankSim dataset was sourced from Kaggle \cite{b1}. Clone and run instructions, plus links to the GitHub repository and presentation slides, appear in Section~\ref{sec:repro}. Figures and metrics reproduce artifacts under \texttt{EVALUATIONS/}; related-work facts are cited and paraphrased by the authors.
+The authors thank Prof.\ Hasan Davulcu and the CSE 573 Semantic Web Mining staff at Arizona State University for guidance. The BankSim dataset was sourced from Kaggle \cite{b1}. Clone and run instructions and links to the GitHub repository appear in Section~\ref{sec:repro}. Figures and metrics reproduce artifacts under \texttt{EVALUATIONS/}; related-work facts are cited and paraphrased by the authors.
 
 % =========================================================
 \balance
@@ -651,13 +618,13 @@ Alloy, ``2024 Fraud Statistics for Banks, Fintechs, and Credit Unions,'' Alloy B
 M.\ H.\ Abubakar, J.\ Musa, Z.\ Usman, A.\ U.\ Alkali, and M.\ Hussaini, ``Fraud detection in financial transactions using machine learning techniques: A review,'' \textit{International Journal of Computer Applications}, vol.\ 185, no.\ 5, 2023.
 
 \bibitem{b5}
-D.\ Wang, J.\ Lin, P.\ Cui, Q.\ Jia, Z.\ Wang, Y.\ Fang, Q.\ Yu, and W.\ Zhu, ``A semi-supervised graph attentive network for financial fraud detection,'' in \textit{Proc.\ IEEE International Conference on Data Mining (ICDM)}, Beijing, China, 2019, pp.\ 598--607. DOI: 10.1109/ICDM.2019.00070
+D.\ Wang, J.\ Lin, P.\ Cui, Q.\ Jia, Z.\ Wang, Y.\ Fang, Q.\ Yu, J.\ Zhou, S.\ Yang, and Y.\ Qi, ``A semi-supervised graph attentive network for financial fraud detection,'' in \textit{Proc.\ IEEE International Conference on Data Mining (ICDM)}, Beijing, China, 2019, pp.\ 598--607. DOI: 10.1109/ICDM.2019.00070
 
 \bibitem{b6}
 W.\ Hamilton, Z.\ Ying, and J.\ Leskovec, ``Inductive representation learning on large graphs,'' in \textit{Advances in Neural Information Processing Systems (NeurIPS)}, vol.\ 30, 2017.
 
 \bibitem{b7}
-S.\ Alarfaj, I.\ Malik, H.\ U.\ Khan, N.\ Almusallam, M.\ Ramzan, and M.\ Ahmed, ``Credit card fraud detection using state-of-the-art machine learning and deep learning algorithms,'' \textit{Mathematics (MDPI)}, vol.\ 11, no.\ 13, Article 2862, 2022. DOI: 10.3390/math11132862
+S.\ Alarfaj, I.\ Malik, H.\ U.\ Khan, N.\ Almusallam, M.\ Ramzan, and M.\ Ahmed, "Credit card fraud detection using state-of-the-art machine learning and deep learning algorithms," IEEE Access, vol. 10, pp. 39700–39715, 2022. DOI: 10.1109/ACCESS.2022.3166891
 
 \end{thebibliography}
 
